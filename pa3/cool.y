@@ -140,7 +140,7 @@ program	:
   ;
 
 class_list :
-  class			          { $$ = cool::Klasses::Create($1); }
+  class                   { $$ = cool::Klasses::Create($1); }
   | error ';'             { $$ = cool::Klasses::Create(); } // Error in the 1st class
   | class_list class      { $$ = ($1)->push_back($2); }
   | class_list error ';'  { $$ = $1; }

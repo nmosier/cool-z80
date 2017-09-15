@@ -40,7 +40,6 @@ limitations under the License.
 #include <unordered_map>
 #include <iosfwd>
 
-//@OnSkeleton
 namespace cool {
 
 /// A string-like class that references another string object.
@@ -71,17 +70,14 @@ class StringRef {
 template <class Elem>
 class SymbolTable {
   typedef typename Elem::KeyType Key;
-  typedef std::unordered_map<Key, Elem*> TableType;
+  typedef std::unordered_map<Key, std::unique_ptr<Elem>> TableType;
 
  public:
+  typedef typename TableType::key_type key_type;
+  typedef typename TableType::mapped_type mapped_type;
+  typedef typename TableType::value_type value_type;
+  typedef typename TableType::size_type size_type;
   typedef typename TableType::const_iterator const_iterator;
-
-  SymbolTable() {}
-  ~SymbolTable() {
-    for (auto & entry : entries_) {
-      delete entry.second;
-    }
-  }
 
   /// Returns boolean indicating if Elem in table.
   /// \param elem Elem to query
@@ -104,7 +100,7 @@ class SymbolTable {
   template <class... Args>
   Elem* lookup(Args&&... args) const {
     auto r = entries_.find(Key(std::forward<Args>(args)...));
-    return (r != entries_.end()) ? r->second : nullptr;
+    return (r != entries_.end()) ? r->second.get() : nullptr;
   }
 
   /// Emplace element constructed from args in table
@@ -114,19 +110,19 @@ class SymbolTable {
   Elem* emplace(Args&&... args) {
     auto found = entries_.find(Key(std::forward<Args>(args)...));
     if (found == entries_.end()) {
-      // Create new entry, deriving key from the entry itself
-      Elem* entry = new Elem(entries_.size(), std::forward<Args>(args)...);
-      found = entries_.emplace(entry->key(), entry).first;
+      // Can't use make_unique because Elem constructor is not public
+      std::unique_ptr<Elem> entry(new Elem(entries_.size(), std::forward<Args>(args)...));
+      found = entries_.emplace(entry->key(), std::move(entry)).first;
     }
-    return found->second;
+    return found->second.get();
   }
 
-  std::size_t size() const { return entries_.size(); }
+  size_type size() const { return entries_.size(); }
   const_iterator begin() const { return entries_.begin(); }
   const_iterator end() const { return entries_.end(); }
 
  private:
-  std::unordered_map<Key, Elem*> entries_;
+  TableType entries_;
 };
 
 // Entry types
@@ -166,9 +162,6 @@ class IndexedEntry {
 
 class StringEntry : public IndexedEntry<StringRef, std::string> {
  private:
-  //static StringEntry* Create(IdType id, const std::string& string);
-  //static StringEntry* Create(IdType id, const char* string, std::size_t length);
-
   StringEntry(IdType id, const std::string& value) : IndexedEntry(id, value) {}
   StringEntry(IdType id, const char* string, std::size_t length)
       : IndexedEntry(id, string, string + length) {}
@@ -178,8 +171,6 @@ class StringEntry : public IndexedEntry<StringRef, std::string> {
 
 class Int32Entry : public IndexedEntry<int32_t, int32_t> {
  private:
-  //static Int32Entry* Create(IdType id, int32_t value);
-
   Int32Entry(IdType id, int32_t value) : IndexedEntry(id, value) {}
 
   friend class SymbolTable<Int32Entry>;
@@ -197,7 +188,7 @@ extern SymbolTable<StringEntry>& gStringTable;
 // Global table of integers (in integer literals)
 extern SymbolTable<Int32Entry>& gIntTable;
 
-/// Initializer type for controlling static initializiation of the SymbolTables using
+/// Initializer type for controlling static initialization of the SymbolTables using
 /// the "Nifty Counter Idiom"
 static struct SymbolTablesInitializer {
   SymbolTablesInitializer ();

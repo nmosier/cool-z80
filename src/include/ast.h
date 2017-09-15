@@ -96,6 +96,7 @@ class Klass : public ASTNode {
   Symbol* parent() const { return parent_; }
   StringLiteral* filename() const { return filename_; }
 
+  // We make the return type here const so that consumers can't modify the vector of Features
   const Features* features() const { return features_; }
 
   Features::size_type features_size() const { return features_->size(); }

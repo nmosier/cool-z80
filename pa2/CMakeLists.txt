@@ -3,9 +3,9 @@ FLEX_TARGET(CoolLexer cool.flex ${CMAKE_CURRENT_BINARY_DIR}/cool-lexer.cpp COMPI
 
 # Flex-generated code uses deprecated features
 set_source_files_properties(
-        ${FLEX_CoolLexer_OUTPUTS}
-        PROPERTIES
-        COMPILE_FLAGS -Wno-deprecated-register
+    ${FLEX_CoolLexer_OUTPUTS}
+    PROPERTIES
+    COMPILE_FLAGS -Wno-deprecated-register
 )
 
 # Lexer is dependent on the parser and so we typically define the targets together

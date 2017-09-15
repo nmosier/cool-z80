@@ -6,6 +6,7 @@ Your directory should contain the following files:
 
 1. `CMakeLists.txt`: CMake file for building the lexer. You should not need to
    modify this file.
+1. `lexer-main.cc`: Executable for your lexer. You should not need to modify this file.
 1. `cool.flex`: A skeleton file for the Flex specification. You should complete
    this file with your regular expressions, patterns and actions (and any
    relevant support code you need).

@@ -39,70 +39,86 @@
    /* Put the tokens into the symbol table, so that GDB and other debuggers
       know about them.  */
    enum yytokentype {
-     CLASS = 258,
-     INHERITS = 259,
-     IF = 260,
-     THEN = 261,
-     ELSE = 262,
-     FI = 263,
-     IN = 264,
-     LET = 265,
-     WHILE = 266,
-     LOOP = 267,
-     POOL = 268,
-     CASE = 269,
-     ESAC = 270,
-     OF = 271,
-     DARROW = 272,
-     NEW = 273,
-     ISVOID = 274,
-     ASSIGN = 275,
-     NOT = 276,
-     LE = 277,
-     STR_CONST = 278,
-     INT_CONST = 279,
-     BOOL_CONST = 280,
-     TYPEID = 281,
-     OBJECTID = 282,
-     ERROR = 283,
-     LET_STMT = 284
+     PROGRAM = 258,
+     CLASS = 259,
+     METHOD = 260,
+     ATTR = 261,
+     FORMAL = 262,
+     BRANCH = 263,
+     ASSIGN = 264,
+     STATIC_DISPATCH = 265,
+     DISPATCH = 266,
+     COND = 267,
+     LOOP = 268,
+     TYPCASE = 269,
+     BLOCK = 270,
+     LET = 271,
+     PLUS = 272,
+     SUB = 273,
+     MUL = 274,
+     DIVIDE = 275,
+     NEG = 276,
+     LT = 277,
+     EQ = 278,
+     LEQ = 279,
+     COMP = 280,
+     INT = 281,
+     STR = 282,
+     BOOL = 283,
+     NEW = 284,
+     ISVOID = 285,
+     NO_EXPR = 286,
+     OBJECT = 287,
+     NO_TYPE = 288,
+     STR_CONST = 289,
+     INT_CONST = 290,
+     ID = 291,
+     LINENO = 292
    };
 #endif
 /* Tokens.  */
-#define CLASS 258
-#define INHERITS 259
-#define IF 260
-#define THEN 261
-#define ELSE 262
-#define FI 263
-#define IN 264
-#define LET 265
-#define WHILE 266
-#define LOOP 267
-#define POOL 268
-#define CASE 269
-#define ESAC 270
-#define OF 271
-#define DARROW 272
-#define NEW 273
-#define ISVOID 274
-#define ASSIGN 275
-#define NOT 276
-#define LE 277
-#define STR_CONST 278
-#define INT_CONST 279
-#define BOOL_CONST 280
-#define TYPEID 281
-#define OBJECTID 282
-#define ERROR 283
-#define LET_STMT 284
+#define PROGRAM 258
+#define CLASS 259
+#define METHOD 260
+#define ATTR 261
+#define FORMAL 262
+#define BRANCH 263
+#define ASSIGN 264
+#define STATIC_DISPATCH 265
+#define DISPATCH 266
+#define COND 267
+#define LOOP 268
+#define TYPCASE 269
+#define BLOCK 270
+#define LET 271
+#define PLUS 272
+#define SUB 273
+#define MUL 274
+#define DIVIDE 275
+#define NEG 276
+#define LT 277
+#define EQ 278
+#define LEQ 279
+#define COMP 280
+#define INT 281
+#define STR 282
+#define BOOL 283
+#define NEW 284
+#define ISVOID 285
+#define NO_EXPR 286
+#define OBJECT 287
+#define NO_TYPE 288
+#define STR_CONST 289
+#define INT_CONST 290
+#define ID 291
+#define LINENO 292
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 67 "cool.y"
+#line 60 "ast.y"
 {
   cool::Program* program;
   cool::Klass* klass;
@@ -116,29 +132,16 @@ typedef union YYSTYPE
   cool::KaseBranch* kase_branch;
   cool::KaseBranches* kase_branches;
   cool::Symbol* symbol;
-  const char *error_msg;
+  cool::StringLiteral* string_literal;
+  int lineno;
 }
 /* Line 1529 of yacc.c.  */
-#line 123 "/Users/mlinderman/LocalCourses/cs433/midd-cool-release/src/cool-parser.hpp"
+#line 140 "/Users/mlinderman/LocalCourses/cs433/midd-cool-release/src/ast-parser.hpp"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
 #endif
 
-extern YYSTYPE cool_yylval;
+extern YYSTYPE ast_yylval;
 
-#if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
-typedef struct YYLTYPE
-{
-  int first_line;
-  int first_column;
-  int last_line;
-  int last_column;
-} YYLTYPE;
-# define yyltype YYLTYPE /* obsolescent; will be withdrawn */
-# define YYLTYPE_IS_DECLARED 1
-# define YYLTYPE_IS_TRIVIAL 1
-#endif
-
-extern YYLTYPE cool_yylloc;

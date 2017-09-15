@@ -51,6 +51,7 @@ class ASTNodeVector {
   typedef typename Data::reverse_iterator reverse_iterator;
   typedef typename Data::const_reverse_iterator const_reverse_iterator;
 
+  // Factory methods for use in parser actions (and other settings)
   static ASTNodeVector* Create() { return new ASTNodeVector(); }
   static ASTNodeVector* Create(Elem* elem) { return new ASTNodeVector({elem}); }
   static ASTNodeVector* Create(std::initializer_list<Elem*> list) {

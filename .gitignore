@@ -47,3 +47,18 @@ CTestTestfile.cmake
 ### Additional common files
 .DS_Store
 .idea/
+
+### Should not be in the skeleton
+src/token.flex
+src/ast.flex
+src/ast.y
+
+### Generated files
+pa1/stack.s
+pa2/lexer
+pa2/cool-lexer.cpp
+pa3/parser
+pa3/cool-parser.output
+pa3/cool-parser.cpp
+test/unit/gtest/
+test/unit/midd-cool-test
