@@ -135,7 +135,14 @@ class StackCommand_Add inherits StackCommand_Pushable {
  };
  
  class StackCommand_Eval inherits StackCommand {
-     eval(stack : Stack) : OptionalInt { stack.pop().eval(stack) };
+     eval(stack : Stack) : OptionalInt {
+         let cmd : StackCommand_Pushable <- stack.pop(), ret_val : OptionalInt in
+             if not isvoid cmd then
+                 cmd.eval(stack)
+             else
+                 ret_val
+             fi
+     };
      out_cmd(os : IO) : IO { os.out_string("e\n") };
  };
 
