@@ -21,6 +21,9 @@ find_package(BISON)
 find_package(FLEX 2.5.35 REQUIRED)
 
 # Set some useful compiler flags for all targets
+set_directory_properties(PROPERTIES
+    COMPILE_DEFINITIONS "$<$<CONFIG:Debug>:DEBUG>"
+)
 add_compile_options("-Wall;-Wno-unused-function")
 include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 

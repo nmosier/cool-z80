@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
 
   int c;
   opterr = 0;  // getopt shouldn't print any messages
-  while ((c = getopt(argc, argv, "lpscrgtTOo:")) != -1) {
+  while ((c = getopt(argc, argv, "lpscrgtTOo:h")) != -1) {
     switch(c) {
 #ifdef DEBUG
       case 'l':
@@ -72,6 +72,12 @@ int main(int argc, char *argv[]) {
         cool_yydebug = 1;
         break;
 #endif
+      case 'h':
+        usage(argv[0]);
+        return 0;
+      case '?':
+        usage(argv[0]);
+        return 85;
       default:
         break;
     }

@@ -39,6 +39,7 @@ limitations under the License.
 #include <vector>
 #include <unordered_map>
 #include <iosfwd>
+#include <memory>
 
 namespace cool {
 

@@ -24,19 +24,20 @@ control whether the tests use your implementations for all phases, or just the
 phase under test (the default).
 
 Within each phase directory, e.g. `lexer`, you can define a new test by
-creating a Cool file ending with `.test`. You then need to define the expected
-`stdout` and `stderr` output. The test runner will compare the output of the
-program-under-test to these files. For example if your new test is named
-"new_test.test", you could create the reference files with (assuming you are in
-the `integration/lexer` directory:
+creating a input file (typically Cool code) ending with `.test`. You then need
+to define the expected `stdout` and `stderr` output. The test runner will
+compare the output of the program-under-test to these files. Note that the
+runner expects the `stdout` and `stderr` files have the same name as the test
+file with ".stdout" and ".stderr" appended, respectively. To help you create
+the reference outputs there are additional `make` targets for each phase that
+will run all of your test inputs through the reference compiler. For example to
+create the reference outputs for your parser tests, you can run:
 
 ```
-/path/to/reference/lexer new_test.test > new_test.test.stdout 2> new_test.test.stderr
+make parser_ref_test
 ```
 
-Note that the runner expects the `stdout` and `stderr` files have the same name
-as the test file with ".stdout" and ".stderr" appended, respectively (as shown
-above).
+There is a corresponding target for each phase (e.g. `lexer_ref_test`, etc.)
 
 ## Unit Tests
 
