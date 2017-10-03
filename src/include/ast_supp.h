@@ -40,6 +40,10 @@ limitations under the License.
 namespace cool {
 
 /// Vector-like type for collections of ASTNode pointers
+/// |tparam Elem Underlying element type (not a pointer type)
+///
+/// A thin wrapper around std::vector for maintaining vectors of ASTNode pointers. Adds
+/// factory methods to faciliate AST creation during parsing.
 template <class Elem>
 class ASTNodeVector {
   typedef std::vector<Elem*> Data;
@@ -51,7 +55,9 @@ class ASTNodeVector {
   typedef typename Data::reverse_iterator reverse_iterator;
   typedef typename Data::const_reverse_iterator const_reverse_iterator;
 
-  // Factory methods for use in parser actions (and other settings)
+  /// @}
+  /// @name Factory methods
+  /// @{
   static ASTNodeVector* Create() { return new ASTNodeVector(); }
   static ASTNodeVector* Create(Elem* elem) { return new ASTNodeVector({elem}); }
   static ASTNodeVector* Create(std::initializer_list<Elem*> list) {
@@ -61,6 +67,9 @@ class ASTNodeVector {
   Elem* at(size_type i) { return data_.at(i); }
   Elem* back() { return data_.back(); }
 
+  /// @}
+  /// @name Iterators
+  /// @{
   const_iterator begin() const { return data_.begin(); }
   const_iterator end() const { return data_.end(); }
 
@@ -69,10 +78,14 @@ class ASTNodeVector {
 
   size_type size() const { return data_.size(); }
 
+  /// push_back - Append elem to ASTNodeVector returning this ASTNodeVector
   ASTNodeVector* push_back(Elem* elem) {
     data_.push_back(elem);
     return this;
   }
+
+  /// Insert nodes from other container into this ASTNodeVector
+  /// \param elems Other ASTNodeVector
   ASTNodeVector* push_back(const ASTNodeVector* elems) {
     data_.insert(data_.end(), elems->begin(), elems->end());
     return this;
@@ -81,6 +94,7 @@ class ASTNodeVector {
  private:
   std::vector<Elem*> data_;
 
+  // ASTNodeVector should only be created with factory methods
   ASTNodeVector() {}
   ASTNodeVector(std::initializer_list<Elem*> list) : data_(list) {}
 };

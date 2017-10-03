@@ -5,6 +5,12 @@ add_test(
         -L "$<TARGET_FILE:lexer>"
 )
 
+add_custom_target(
+    lexer_test_ref
+    find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/lexer-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" {} > {}.stdout 2> {}.stderr' \\\;
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lexer"
+)
+
 # Use reference lexer by default. You can change the -L argument to use your lexer implementation
 add_test(
     NAME parser_integration_test
@@ -12,4 +18,10 @@ add_test(
         ${CMAKE_CURRENT_SOURCE_DIR}/parser-test.sh
         -L "${CMAKE_SOURCE_DIR}/bin/lexer"
         -P "$<TARGET_FILE:parser>"
+)
+
+add_custom_target(
+    parser_test_ref
+    find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/parser-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" {} > {}.stdout 2> {}.stderr' \\\;
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/parser"
 )
