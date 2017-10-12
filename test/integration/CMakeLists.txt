@@ -25,3 +25,19 @@ add_custom_target(
     find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/parser-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" {} > {}.stdout 2> {}.stderr' \\\;
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/parser"
 )
+
+# Use reference lexer and parser by default. You can change the -L argument to use your lexer implementation
+add_test(
+    NAME semant_integration_test
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/runner.sh ${CMAKE_CURRENT_SOURCE_DIR}/semant
+        ${CMAKE_CURRENT_SOURCE_DIR}/semant-test.sh
+        -L "${CMAKE_SOURCE_DIR}/bin/lexer"
+        -P "${CMAKE_SOURCE_DIR}/bin/parser"
+        -S "$<TARGET_FILE:semant>"
+)
+
+add_custom_target(
+    semant_test_ref
+    find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/semant-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" -S "${CMAKE_SOURCE_DIR}/bin/semant" {} > {}.stdout 2> {}.stderr' \\\;
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/semant"
+)

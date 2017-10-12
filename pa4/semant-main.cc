@@ -33,48 +33,60 @@ See the License for the specific language governing permissions and
 limitations under the License.
  */
 
-#include <cassert>
-#include <cstring>
-#include <new>
-#include <type_traits>
+#include <iostream>
+#include <unistd.h>     // getopt
+#include <stdio.h>
 
-#include "stringtab.h"
+#include "ast.h"
+#include "semant.h"
 
-namespace cool {
-StringRef::StringRef(const char* string)
-    : data_(string), length_(string ? ::strlen(string) : 0) {}
+extern cool::Program* gASTRoot;      // root of the abstract syntax tree
 
-bool StringRef::operator==(const StringRef& rhs) const {
-  return length_ == rhs.length_ && ::memcmp(data_, rhs.data_, length_) == 0;
-};
+extern int yy_flex_debug;
+extern int ast_yyparse(void);  // Entry point to the AST parser
 
-// Nifty Counter Idiom
-// https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Nifty_Counter
+std::istream* gInputStream = &std::cin; // we read the AST from standard input
+const char *gCurrFilename = "<stdin>";
 
-static std::size_t gSymbolTableCounter;
+namespace {
 
-#define SYMBOL_TABLE_DECLS(TYPE, VAR, STORE_VAR) \
-static typename std::aligned_storage<sizeof(TYPE), alignof(TYPE)>::type STORE_VAR; \
-TYPE & VAR = reinterpret_cast<TYPE &>(STORE_VAR);
-
-SYMBOL_TABLE_DECLS(SymbolTable<Symbol>, gIdentTable, gIdentTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<StringEntry>, gStringTable, gStringTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<Int32Entry>, gIntTable, gIntTableStorage);
-
-#undef SYMBOL_TABLE_DECLS
-
-SymbolTablesInitializer::SymbolTablesInitializer () {
-  if (gSymbolTableCounter++ == 0) {
-    new (&gIdentTable) SymbolTable<Symbol>();
-    new (&gStringTable) SymbolTable<StringEntry>();
-    new (&gIntTable) SymbolTable<Int32Entry>();
-  }
+void usage(const char *program) {
+  std::cerr << "Usage: " << program << " [-s]" << std::endl;
 }
-SymbolTablesInitializer::~SymbolTablesInitializer () {
-  if (--gSymbolTableCounter == 0) {
-    gIdentTable.~SymbolTable<Symbol>();
-    gStringTable.~SymbolTable<StringEntry>();
-    gIntTable.~SymbolTable<Int32Entry>();
-  }
+
 }
-} // namespace cool
+
+int main(int argc, char *argv[]) {
+  yy_flex_debug = 0;
+
+  int c;
+  opterr = 0;  // getopt shouldn't print any messages
+  while ((c = getopt(argc, argv, "lpscrgtTOo:h")) != -1) {
+    switch(c) {
+#ifdef DEBUG
+      case 'l':
+        yy_flex_debug = 1;
+        break;
+      case 's':
+        cool::gSemantDebug = true;
+        break;
+#endif
+      case 'h':
+        usage(argv[0]);
+        return 0;
+      case '?':
+        usage(argv[0]);
+        return 85;
+      default:
+        break;
+    }
+  }
+
+  // Parse AST dump
+  ast_yyparse();
+
+  cool::Semant(gASTRoot);
+
+  gASTRoot->DumpTree(std::cout, 0, true /* Dump types as well */);
+}
+

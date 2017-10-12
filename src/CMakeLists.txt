@@ -3,4 +3,6 @@ add_library(cool_objs
     stringtab.cc
     utilities.cc
     ast.cc
+    ast_consumer.cc
+    semant.cc
 )

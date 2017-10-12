@@ -31,50 +31,9 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
- */
+*/
 
-#include <cassert>
-#include <cstring>
-#include <new>
-#include <type_traits>
+#pragma once
 
-#include "stringtab.h"
-
-namespace cool {
-StringRef::StringRef(const char* string)
-    : data_(string), length_(string ? ::strlen(string) : 0) {}
-
-bool StringRef::operator==(const StringRef& rhs) const {
-  return length_ == rhs.length_ && ::memcmp(data_, rhs.data_, length_) == 0;
-};
-
-// Nifty Counter Idiom
-// https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Nifty_Counter
-
-static std::size_t gSymbolTableCounter;
-
-#define SYMBOL_TABLE_DECLS(TYPE, VAR, STORE_VAR) \
-static typename std::aligned_storage<sizeof(TYPE), alignof(TYPE)>::type STORE_VAR; \
-TYPE & VAR = reinterpret_cast<TYPE &>(STORE_VAR);
-
-SYMBOL_TABLE_DECLS(SymbolTable<Symbol>, gIdentTable, gIdentTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<StringEntry>, gStringTable, gStringTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<Int32Entry>, gIntTable, gIntTableStorage);
-
-#undef SYMBOL_TABLE_DECLS
-
-SymbolTablesInitializer::SymbolTablesInitializer () {
-  if (gSymbolTableCounter++ == 0) {
-    new (&gIdentTable) SymbolTable<Symbol>();
-    new (&gStringTable) SymbolTable<StringEntry>();
-    new (&gIntTable) SymbolTable<Int32Entry>();
-  }
-}
-SymbolTablesInitializer::~SymbolTablesInitializer () {
-  if (--gSymbolTableCounter == 0) {
-    gIdentTable.~SymbolTable<Symbol>();
-    gStringTable.~SymbolTable<StringEntry>();
-    gIntTable.~SymbolTable<Int32Entry>();
-  }
-}
-} // namespace cool
+#include "ast_fwd.h"
+#include "ast-parser.hpp"

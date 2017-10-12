@@ -55,9 +55,11 @@ class ASTNodeVector {
   typedef typename Data::reverse_iterator reverse_iterator;
   typedef typename Data::const_reverse_iterator const_reverse_iterator;
 
-  /// @}
-  /// @name Factory methods
-  /// @{
+  /**
+   * @}
+   * @name Factory methods
+   * @{
+   */
   static ASTNodeVector* Create() { return new ASTNodeVector(); }
   static ASTNodeVector* Create(Elem* elem) { return new ASTNodeVector({elem}); }
   static ASTNodeVector* Create(std::initializer_list<Elem*> list) {
@@ -67,9 +69,11 @@ class ASTNodeVector {
   Elem* at(size_type i) { return data_.at(i); }
   Elem* back() { return data_.back(); }
 
-  /// @}
-  /// @name Iterators
-  /// @{
+  /**
+   * @}
+   * @name Iterators
+   * @{
+   */
   const_iterator begin() const { return data_.begin(); }
   const_iterator end() const { return data_.end(); }
 
@@ -78,14 +82,21 @@ class ASTNodeVector {
 
   size_type size() const { return data_.size(); }
 
-  /// push_back - Append elem to ASTNodeVector returning this ASTNodeVector
+  /**
+   * Append elem to ASTNodeVector
+   * @param elem
+   * @return This ASTNodeVector
+   */
   ASTNodeVector* push_back(Elem* elem) {
     data_.push_back(elem);
     return this;
   }
 
-  /// Insert nodes from other container into this ASTNodeVector
-  /// \param elems Other ASTNodeVector
+  /**
+   * Insert nodes from other container into this ASTNodeVector
+   * @param elems Other ASTNodeVector
+   * @return This ASTNodVector
+   */
   ASTNodeVector* push_back(const ASTNodeVector* elems) {
     data_.insert(data_.end(), elems->begin(), elems->end());
     return this;
