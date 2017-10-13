@@ -24,8 +24,6 @@ Class D inherts A {
 Class E inherits A {
 ;
 
--- what follows is a version of good.cl modified to produce errors
-
 class TestA {
 	-- testing error recovery for invalid attributes
 	;

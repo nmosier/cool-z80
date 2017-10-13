@@ -47,6 +47,7 @@ class TestA {
 		~int2 <- 1;
 	}};
 	
+	-- test 'if' ambiguity
 	test_let(io: IO): IO {{
 		let i: Int <- 0 in
 			let i: Int <- 1 in i + i;	-- should output '2', not '1';
@@ -55,6 +56,7 @@ class TestA {
 
 };
 
+	-- test class that inherits
 Class BB__ inherits A {
 	num: Int;
 	str: String <- "This is a string.";
