@@ -124,9 +124,33 @@ error when the lexer returns it.
 %type <klasses> class_list
 %type <klass> class
 %type <features> optional_feature_list
-
+%type <features> feature_list
+%type <feature> feature
+%type <formals> optional_formal_list
+%type <formals> formal_list
+%type <formal> formal
+%type <expression> expression
+%type <kase_branches> case_branch_list
+%type <kase_branch> case_branch
+%type <expression> let_statement_recursive
+%type <expression> optional_initializer
+%type <expressions> expression_list
+%type <expressions> optional_actuals_list
+%type <expressions> actuals_list
 
 /* Precedence declarations (in reverse order of precendence). */
+
+%right IN
+
+%right ASSIGN
+%nonassoc NOT
+%nonassoc LE '<' '='
+%left '+' '-'
+%left '*' '/'
+%nonassoc ISVOID
+%nonassoc '~'
+%nonassoc '@'
+%nonassoc '.'
 
 %%
 
@@ -160,8 +184,130 @@ class :
 /* Feature list may be empty, but no empty features in list. You will need to flesh this out further. */
 optional_feature_list :
   /* empty */ { $$ = cool::Features::Create(); }
+  | feature_list { $$ = $1; }	
   ;
 
+feature_list :
+  feature ';'	{ $$ = cool::Features::Create($1); }
+  | error ';'	{ $$ = cool::Features::Create(); }
+  | feature_list feature ';' { $$ = ($1)->push_back($2); }
+  | feature_list error ';'	{ $$ = $1; }
+  ;
+
+feature:
+	OBJECTID ':' TYPEID ASSIGN expression { $$ = cool::Attr::Create($1, $3, $5, @1); }
+	| OBJECTID ':' TYPEID	{ $$ = cool::Attr::Create($1, $3, cool::NoExpr::Create(), @1); }
+	| OBJECTID '(' optional_formal_list ')' ':' TYPEID '{' expression '}'
+		{ $$ = cool::Method::Create($1, $3, $6, $8, @1); }
+	;
+
+optional_formal_list:
+	/* empty */ { $$ = cool::Formals::Create(); }
+	| formal_list	{ $$ = $1; }
+	;
+
+formal_list:
+	formal	{ $$ = cool::Formals::Create($1); }
+	| formal_list ',' formal	 { $$ = ($1)->push_back($3); }
+	;
+
+formal:
+	OBJECTID ':' TYPEID	{ $$ = cool::Formal::Create($1, $3, @1); }
+	;
+
+expression:
+	BOOL_CONST	{ $$ = $1; }
+	| INT_CONST { $$ = $1; }
+	| STR_CONST { $$ = $1; }
+	| OBJECTID	{ $$ = cool::Ref::Create($1, @1); }
+	| '(' expression ')'	{ $$ = $2; }
+	| NOT expression
+		{ $$ = cool::UnaryOperator::Create(cool::UnaryOperator::UO_Not, $2, @1); }
+	| '~' expression
+		{ $$ = cool::UnaryOperator::Create(cool::UnaryOperator::UO_Neg, $2, @1); }
+	| expression '=' expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_EQ, $1, $3, @3); }
+	| expression LE expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_LE, $1, $3, @3); }
+	| expression '<' expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_LT, $1, $3, @3); }
+	| expression '/' expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_Div, $1, $3, @3); }
+	| expression '*' expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_Mul, $1, $3, @3); }
+	| expression '-' expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_Sub, $1, $3, @3); }
+	| expression '+' expression
+		{ $$ = cool::BinaryOperator::Create(cool::BinaryOperator::BO_Add, $1, $3, @3); }
+	| ISVOID expression
+		{ $$ = cool::UnaryOperator::Create(cool::UnaryOperator::UO_IsVoid, $2, @1); }
+	| NEW TYPEID
+		{ $$ = cool::Knew::Create($2, @1); }
+	| CASE expression OF case_branch_list ESAC
+		{ $$ = cool::Kase::Create($2, $4, @1); }
+	| LET let_statement_recursive { $$ = $2; }
+	| '{' expression_list '}'
+		{ $$ = cool::Block::Create($2, @1); }
+	| WHILE expression LOOP expression POOL
+		{ $$ = cool::Loop::Create($2, $4, @1); }
+	| IF expression THEN expression ELSE expression FI
+		{ $$ = cool::Cond::Create($2, $4, $6, @1); }
+	| OBJECTID '(' optional_actuals_list ')'
+		{ $$ = cool::Dispatch::Create(cool::Ref::Create(cool::gIdentTable.emplace("self"), @1), $1, $3, @1); }
+	| expression '.' OBJECTID '(' optional_actuals_list ')'
+		{ $$ = cool::Dispatch::Create($1, $3, $5, @1); }
+	| expression '@' TYPEID '.' OBJECTID '(' optional_actuals_list ')'
+		{ $$ = cool::StaticDispatch::Create($1, $3, $5, $7, @1); }
+	| OBJECTID ASSIGN expression
+		{ $$ = cool::Assign::Create($1, $3, @1); }
+	;
+	
+case_branch_list:
+	case_branch							{ $$ = cool::KaseBranches::Create($1); }
+	| error								{ $$ = cool::KaseBranches::Create(); }
+	| case_branch_list case_branch	{ $$ = ($1)->push_back($2); }
+	| case_branch_list error			{ $$ = $1; }
+	;
+
+case_branch:
+	OBJECTID ':' TYPEID DARROW expression ';'	{ $$ = cool::KaseBranch::Create($1, $3, $5, @1); }
+	;
+
+
+let_statement_recursive:
+	OBJECTID ':' TYPEID optional_initializer IN expression
+		{ $$ = cool::Let::Create($1, $3, $4, $6, @1); }
+	| OBJECTID ':' TYPEID optional_initializer ',' let_statement_recursive
+		{ $$ = cool::Let::Create($1, $3, $4, $6, @1); }
+	| error ',' let_statement_recursive
+		{ $$ = $3; }
+	| error IN expression
+		{ $$ = $3; }
+	;
+
+optional_initializer:
+	/* no initializer */	{ $$ = cool::NoExpr::Create(); }
+	| ASSIGN expression		{ $$ = $2; }
+	;
+	
+
+expression_list:
+	expression ';'	{ $$ = cool::Expressions::Create($1); }
+	| expression_list expression ';' { $$ = ($1)->push_back($2); }
+	/* error catching */
+	| error ';'	{ $$ = cool::Expressions::Create(); }
+	| expression_list error ';' { $$ = $1; };
+	;
+	
+optional_actuals_list:
+	/* empty list */	{ $$ = cool::Expressions::Create(); }
+	| actuals_list		{ $$ = $1; }
+	;
+
+actuals_list:
+	expression			{ $$ = cool::Expressions::Create($1); }
+	| actuals_list ',' expression	{ $$ = ($1)->push_back($3); }
+	;
 
 /* end of grammar */
 %%
