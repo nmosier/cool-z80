@@ -7,7 +7,7 @@ add_test(
 
 add_custom_target(
     lexer_test_ref
-    find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/lexer-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" {} > {}.stdout 2> {}.stderr' \\\;
+    find . -name '*.test' -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/lexer-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" {} > {}.stdout 2> {}.stderr' \\\;
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lexer"
 )
 
@@ -22,7 +22,7 @@ add_test(
 
 add_custom_target(
     parser_test_ref
-    find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/parser-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" {} > {}.stdout 2> {}.stderr' \\\;
+    find . -name '*.test' -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/parser-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" {} > {}.stdout 2> {}.stderr' \\\;
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/parser"
 )
 
@@ -38,6 +38,6 @@ add_test(
 
 add_custom_target(
     semant_test_ref
-    find . -name "*.test" -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/semant-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" -S "${CMAKE_SOURCE_DIR}/bin/semant" {} > {}.stdout 2> {}.stderr' \\\;
+    find . -name '*.test' -exec bash -c '${CMAKE_CURRENT_SOURCE_DIR}/semant-test.sh -L "${CMAKE_SOURCE_DIR}/bin/lexer" -P "${CMAKE_SOURCE_DIR}/bin/parser" -S "${CMAKE_SOURCE_DIR}/bin/semant" {} > {}.stdout 2> {}.stderr' \\\;
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/semant"
 )
