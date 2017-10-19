@@ -31,50 +31,67 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
- */
+*/
 
-#include <cassert>
-#include <cstring>
-#include <new>
-#include <type_traits>
+#pragma once
 
+#include <assert.h>
+
+#include "ast.h"
+#include "ast_consumer.h"
 #include "stringtab.h"
+#include "scopedtab.h"
 
 namespace cool {
-StringRef::StringRef(const char* string)
-    : data_(string), length_(string ? ::strlen(string) : 0) {}
 
-bool StringRef::operator==(const StringRef& rhs) const {
-  return length_ == rhs.length_ && ::memcmp(data_, rhs.data_, length_) == 0;
+/**
+ * Set to true to display debig output
+ */
+extern bool gSemantDebug;
+
+/**
+ * Main entry point for semantic analysis
+ * @param program
+ */
+void Semant(Program* program);
+
+
+/**
+ * Provide error tracking and structured printing of semantic errors
+ */
+class SemantError {
+ public:
+  SemantError(std::ostream& os) : os_(os), errors_(0) {}
+
+  std::size_t errors() const { return errors_; }
+
+  /**
+   * @}
+   * @name Error reporting
+   * @{
+   */
+  std::ostream& operator()(const Klass* klass) { return (*this)(klass->filename(), klass); }
+  std::ostream& operator()(const Klass* klass, const ASTNode* node) {
+    return (*this)(klass->filename(), node);
+  }
+
+  std::ostream& operator()(const StringLiteral* filename, const ASTNode* node) {
+    errors_++;
+    os_ << filename << ":" << node->loc() << ": ";
+    return os_;
+  }
+
+  std::ostream& operator()() {
+    errors_++;
+    return os_;
+  }
+
+ private:
+  std::ostream& os_;
+  std::size_t errors_;
 };
 
-// Nifty Counter Idiom
-// https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Nifty_Counter
-
-static std::size_t gSymbolTableCounter;
-
-#define SYMBOL_TABLE_DECLS(TYPE, VAR, STORE_VAR) \
-static typename std::aligned_storage<sizeof(TYPE), alignof(TYPE)>::type STORE_VAR; \
-TYPE & VAR = reinterpret_cast<TYPE &>(STORE_VAR);
-
-SYMBOL_TABLE_DECLS(SymbolTable<Symbol>, gIdentTable, gIdentTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<StringEntry>, gStringTable, gStringTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<Int32Entry>, gIntTable, gIntTableStorage);
-
-#undef SYMBOL_TABLE_DECLS
-
-SymbolTablesInitializer::SymbolTablesInitializer () {
-  if (gSymbolTableCounter++ == 0) {
-    new (&gIdentTable) SymbolTable<Symbol>();
-    new (&gStringTable) SymbolTable<StringEntry>();
-    new (&gIntTable) SymbolTable<Int32Entry>();
-  }
 }
-SymbolTablesInitializer::~SymbolTablesInitializer () {
-  if (--gSymbolTableCounter == 0) {
-    gIdentTable.~SymbolTable<Symbol>();
-    gStringTable.~SymbolTable<StringEntry>();
-    gIntTable.~SymbolTable<Int32Entry>();
-  }
-}
-} // namespace cool
+
+
+

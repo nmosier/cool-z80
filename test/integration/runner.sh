@@ -1,6 +1,10 @@
 #!/bin/bash
 
+BOLD=$(tput bold)
+NORMAL=$(tput sgr0)
+
 DIFF_S=1
+PRINT_TEST=
 
 usage()
 {
@@ -11,15 +15,19 @@ Run integration tests
 
 Options:
   -s    Don't diff assembly files even if available, default false.
+  -p    Print test case on error, default false;
   -h    Print this message
 EOF
 }
 
-while getopts "sh" Option
+while getopts "sph" Option
 do
     case $Option in
         s)
             DIFF_S=
+            ;;
+        p)
+            PRINT_TEST=1
             ;;
         h)
             usage
@@ -60,7 +68,10 @@ for test in "${tests[@]}"; do
     (( ++total ))
 
     name=$(basename "$test")
-    echo "Testing ${name}"
+    echo "Testing ${BOLD}${name}${NORMAL}"
+    if [[ -e "${test}.desc" ]]; then
+        cat "${test}.desc"
+    fi
 
     $* -w "$OUT_DIR" "$test" > "${OUT_DIR}/${name}.stdout" 2> "${OUT_DIR}/${name}.stderr"
 
@@ -88,6 +99,11 @@ for test in "${tests[@]}"; do
 
     if [[ $test_exit -eq 0 ]]; then
         (( ++passed ))
+    fi
+
+    if [[ $PRINT_TEST && $test_exit -ne 0 ]]; then
+        echo "Failing test case:"
+        cat "${test}"
     fi
 done
 
