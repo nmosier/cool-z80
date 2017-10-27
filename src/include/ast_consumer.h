@@ -53,14 +53,35 @@ class KlassTable;
 template<class Node>
 class InheritanceNode {
  public:
+  /**
+   * @param klass Klass ASTNode for this inheritance graph node
+   * @param inheritable true if class can be inherited from (true for all user-defined classes)
+   * @param basic true if basic class, e.g. Bool (false for all user-defined classes)
+   * @return
+   */
   InheritanceNode(Klass* klass, bool inheritable, bool basic) :
       klass_(klass), inheritable_(inheritable), basic_(basic) {}
+  virtual ~InheritanceNode() = default;
 
+  /**
+   * @return Klass ASTNode for this inheritance graph node
+   */
   Klass* klass() const { return klass_; }
+
+  /**
+   * @return name of the associated Klass
+   */
   Symbol* name() const { return klass_->name(); }
   StringLiteral* filename() const { return klass_->filename(); }
 
+  /**
+   * @return Parent node
+   */
   Node* parent() const { return parent_; }
+
+  /**
+   * @return Name of the parent class
+   */
   Symbol* parent_name() const { return klass_->parent(); }
 
   /**
@@ -80,7 +101,14 @@ class InheritanceNode {
   bool inheritable_;
   bool basic_;
 
+  /**
+   * Parent node in the inheritance graph
+   */
   Node* parent_ = nullptr;
+
+  /**
+   * Child nodes of this class
+   */
   std::vector<Node*> children_;
 
   friend class KlassTable<Node>;
@@ -101,8 +129,21 @@ class KlassTable {
     }
   }
 
+  /**
+   * Get the root of the inheritance graph.
+   *
+   * By the Cool specification, the root of the inheritance graph must always be Object, thus this root node
+   * is automatically set to the Node for the Object class.
+   *
+   * @return The root of the inheritance graph (the Object class)
+   */
   Node* root() const { return root_; }
 
+  /**
+   * Find the inheritance node for a class by name
+   * @param name Class name
+   * @return InheritanceNode or nullptr if class not found
+   */
   Node* ClassFind(Symbol* name) const {
     auto found_node = node_table_.find(name);
     return (found_node != node_table_.end()) ? found_node->second : nullptr;
