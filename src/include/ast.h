@@ -45,6 +45,10 @@ limitations under the License.
 namespace cool {
 
 // Forward declare semantic analysis and code generation environments
+class InheritanceGraph;
+class InheritanceGraphNode;
+class SemantEnv;
+class SemantError;
 
 /// Abstract base class for all AST Nodes
 class ASTNode {
@@ -147,6 +151,7 @@ class Feature : public ASTNode {
   Symbol* name() const { return name_; }
   Symbol* decl_type() const { return decl_type_; }
 
+  virtual void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) {};
 
  protected:
   Symbol* name_;
@@ -171,6 +176,7 @@ class Method : public Feature {
   Formals::const_iterator formals_begin() const { return formals_->begin(); }
   Formals::const_iterator formals_end() const { return formals_->end(); }
 
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
 
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
@@ -191,6 +197,7 @@ class Attr : public Feature {
 
   Expression* init() const { return init_; }
 
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
 
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
@@ -207,8 +214,9 @@ class Expression : public ASTNode {
   Symbol* type() const { return type_; }
   void set_type(Symbol* type) { type_ = type; }
 
-
   void DumpType(std::ostream& os, size_t level, bool with_types) const;
+
+  virtual void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) {};
 
  protected:
   Symbol* type_;
@@ -221,7 +229,7 @@ class Assign : public Expression {
  public:
   static Assign* Create(Symbol* name, Expression* value, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -238,7 +246,7 @@ class Dispatch : public Expression {
   static Dispatch* Create(Expression* receiver, Symbol* name, Expressions* actuals,
                           SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -256,7 +264,7 @@ class StaticDispatch : public Dispatch {
   static StaticDispatch* Create(Expression* receiver, Symbol* dispatch_type, Symbol* name,
                                 Expressions* actuals, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -273,7 +281,7 @@ class Cond : public Expression {
   static Cond* Create(Expression* pred, Expression* then_branch, Expression* else_branch,
                       SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -290,7 +298,7 @@ class Loop : public Expression {
  public:
   static Loop* Create(Expression* pred, Expression* body, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -306,7 +314,7 @@ class Block : public Expression {
  public:
   static Block* Create(Expressions* body, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -321,7 +329,7 @@ class Let : public Expression {
   static Let* Create(Symbol* name, Symbol* decl_type, Expression* init, Expression* body,
                      SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -339,7 +347,7 @@ class Kase : public Expression {
  public:
   static Kase* Create(Expression* input, KaseBranches* cases, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -357,7 +365,7 @@ class KaseBranch : public Expression {
 
   Symbol* decl_type() const { return decl_type_; }
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -374,7 +382,7 @@ class Knew : public Expression {
  public:
   static Knew* Create(Symbol* name, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -390,7 +398,7 @@ class UnaryOperator : public Expression {
 
   static UnaryOperator* Create(UnaryKind kind, Expression* input, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -412,7 +420,7 @@ class BinaryOperator : public Expression {
 
   const char* KindAsString() const;
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -429,7 +437,7 @@ class Ref : public Expression {
  public:
   static Ref* Create(Symbol* name, SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -443,7 +451,7 @@ class NoExpr : public Expression {
  public:
   static NoExpr* Create(SourceLoc loc = 0);
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -458,8 +466,8 @@ class StringLiteral : public Expression {
   static StringLiteral* Create(const char* string, std::size_t length, SourceLoc loc = 0);
 
   const std::string& value() const { return value_->value(); }
-
-
+  
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
   friend std::ostream& operator<<(std::ostream& os, const StringLiteral* s) {
@@ -480,7 +488,7 @@ class IntLiteral : public Expression {
 
   int32_t value() const { return value_->value(); }
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -496,7 +504,7 @@ class BoolLiteral : public Expression {
 
   bool value() const { return value_; }
 
-
+  void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
