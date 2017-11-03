@@ -5,4 +5,6 @@ add_library(cool_objs
     ast.cc
     ast_consumer.cc
     semant.cc
+    cgen.cc
+    cgen_supp.cc
 )

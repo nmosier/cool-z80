@@ -168,7 +168,8 @@ class KlassTable {
   std::vector<Node*> nodes_;
 
   /**
-   * Add node to name-node map, but not container tracking nodes in the inheritance graph.
+   * Add node to name-node map, but not container tracking nodes in the inheritance graph. This method
+   * is only used for special classes that are not included in the inheritance graph.
    * @param node
    */
   void AddNode(Node* node) {
@@ -195,8 +196,10 @@ class KlassTable {
   }
 
   /**
-   * Install user-defined Cool classes into class table
-   * @param klasses
+   * Install user-defined Cool classes into class table.
+   *
+   * Assumes that classes form a valid inheritance graph
+   * @param klasses All Klass AST nodes in the program
    */
   void InstallClasses(Klasses *klasses) {
     for (auto klass : *klasses)

@@ -47,6 +47,9 @@ namespace cool {
    * Scoped table for use as a SymbolTable in AST analysis
    * @tparam Key
    * @tparam Value
+   *
+   * The table actually stores Value* types, so a table mapping Symbol* to Symbol* would
+   * be declared as ScopedTable<Symbol*,Symbol>.
    */
   template<class Key, class Value>
   class ScopedTable {
