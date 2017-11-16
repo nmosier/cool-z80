@@ -73,7 +73,7 @@ for test in "${tests[@]}"; do
         cat "${test}.desc"
     fi
 
-    $* -w "$OUT_DIR" "$test" > "${OUT_DIR}/${name}.stdout" 2> "${OUT_DIR}/${name}.stderr"
+    "$@" -w "$OUT_DIR" "$test" > "${OUT_DIR}/${name}.stdout" 2> "${OUT_DIR}/${name}.stderr"
 
     test_exit=0
 
