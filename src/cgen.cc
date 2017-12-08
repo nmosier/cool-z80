@@ -440,6 +440,9 @@ std::ostream& CgenDef(std::ostream& os, const SymbolTable<Elem>& table, size_t c
 
 } // anonymous namespace
 
+
+
+
 /* MemoryLocation implementation */
 void IndirectLocation::emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {
   emit_addiu(dest_reg, base_reg(), WORD_SIZE*offset(), s);
@@ -462,6 +465,10 @@ void AbsoluteLocation::emit_store_to_loc(const char* src_reg, std::ostream& s) {
   s << SW << src_reg << " " << label() << "+" << WORD_SIZE*offset() << std::endl;
 }
 
+
+
+// CreateAttrVarEnv
+//  -adds attributes to the variable environment (mapping from symbols to mem locations)
 void CgenNode::CreateAttrVarEnv(int next_offset) {
   if (parent() != nullptr) {
   	attrVarEnv_ = parent_->attrVarEnv_;
@@ -472,31 +479,23 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
   	if ((*feature)->attr()) {
   	  Attr* attr = (Attr*) (*feature);
   	  MemoryLocation* offset = new IndirectLocation(next_offset, SELF);
-  	  //attrOffsets_.push_back(offset);
   	  attrVarEnv_.Push(attr->name(), offset);  	  
   	  ++next_offset;
   	  ++objectSize_;	// update object size
   	}
   }
   
-  std::clog << klass()->name() << ":" << objectSize_ << std::endl;
-  for (auto pair : attrVarEnv_.vars_) {
-  	std::clog << "\t" << pair.first << ":" << pair.second.front()->offset() << std::endl;
-  }
-  
-  for (CgenNode* child : children_) {
-  	child->CreateAttrVarEnv(next_offset);
-  }
-  
+  for (CgenNode* child : children_)
+  	{ child->CreateAttrVarEnv(next_offset); }
 }
 
+// CreateDispatchTables
+//  -creates a table of dispatch tables (one per class)
+//   with each table mapping a method name to a memory location
 void CgenNode::CreateDispatchTables(DispatchTables& tables, int next_offset) {
-  if (parent() != nullptr) {
-     tables[klass()->name()] = tables[parent()->name()];
-  }
+  if (parent() != nullptr)
+     { tables[klass()->name()] = tables[parent()->name()]; }
   
-  std::clog << klass()->name() << ":" << std::endl;
-
   for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
   	if ((*feature)->method()) {
   	  Method* method = (Method*) (*feature);
@@ -511,24 +510,22 @@ void CgenNode::CreateDispatchTables(DispatchTables& tables, int next_offset) {
   	}
   }
   
-  for (auto pair : tables[klass()->name()]) {
-  	std::clog << "\t" << pair.first << ":" << pair.second->offset() << std::endl;
-  }
-  
-  for (CgenNode* child : children_) {
-    child->CreateDispatchTables(tables, next_offset);
-  }
+  for (CgenNode* child : children_)
+    { child->CreateDispatchTables(tables, next_offset); }
 }
 
+
+
+
+// CgenKlassTable initializer
+//  -builds inheritance graph
+//  -assigns class tags
+//  -initializes variable environments for each class
+//  -creates dispatch tables for each class
 CgenKlassTable::CgenKlassTable(Klasses* klasses) {
   InstallClasses(klasses);
 
-  // Add your code to:
-  // - Build inheritance graph
-  // - Initialize the node tags and other information you need
-  
-  // build inheritance graph (connect nodes)
-  // also assigns tags
+  // build inheritance graph (connect nodes) and assign tags
   unsigned int tag = 0;
   for (CgenNode* isolated_node : nodes_) {
     std::clog << isolated_node->klass()->name() << ":" << tag << std::endl;
@@ -538,12 +535,9 @@ CgenKlassTable::CgenKlassTable(Klasses* klasses) {
     isolated_node->parent_ = parent_node;
   }
   
-  // generate class variable environments
-  // each class needs an environment of associated attributes
-  // also needs a pointer to dispatch table
-  
-  // generate Attribute offsets, starting from root (Object)
+  // generate class variable environments, starting recursively from root (Object)
   root()->CreateAttrVarEnv(CgenObjectLayout_AttributeOffset);
+  // recursively generate dispatch tables, starting from empty table
   root()->CreateDispatchTables(gCgenDispatchTables, 0);
 }
 
@@ -618,6 +612,7 @@ void CgenKlassTable::CgenGlobalText(std::ostream& os) const {
   os << std::endl;
 }
 
+
 void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t) {
   // add overridden methods to method inheritance table
   for (auto features_it = klass()->features_begin(); features_it != klass()->features_end(); features_it++) {
@@ -630,36 +625,28 @@ void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, Metho
 
   DispatchTable& table = tables[klass()->name()];
   std::vector<Symbol*> ordered_table(table.size());
-  for (std::pair<Symbol*,MemoryLocation*> p : table) {
-    /* if (inheritance_t.find(p.first) == inheritance_t.end() || ) {
-      inheritance_t[p.first] = klass()->name();
-    } */
-  	ordered_table[p.second->offset()] = p.first;
-  }
-  	
-    // emit table for current class node
-    os << klass()->name() << DISPTAB_SUFFIX << LABEL;
-    for (Symbol* method_name : ordered_table) {
-      os << WORD << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl;
-    }
+  for (std::pair<Symbol*,MemoryLocation*> p : table)
+    {  ordered_table[p.second->offset()] = p.first; }
 
-  for (CgenNode* child : children_) {
-    child->EmitDispatchTable(os, tables, inheritance_t);
-  }
+  os << klass()->name() << DISPTAB_SUFFIX << LABEL;
+  for (Symbol* method_name : ordered_table)
+    { os << WORD << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl; }
+
+  for (CgenNode* child : children_)
+    { child->EmitDispatchTable(os, tables, inheritance_t); }
 }
 
+// CgenDispatchTables: emits all dispatch tables
 void CgenKlassTable::CgenDispatchTables(std::ostream& os) const {
-  std::clog << "Emitting dispatch tables..." << std::endl;
   CgenNode::MethodInheritanceTable inheritance_t;
   root()->EmitDispatchTable(os, gCgenDispatchTables, inheritance_t);
-  std::clog << "Done emitting dispatch tables." << std::endl;
 }
 
 void CgenNode::EmitPrototypeObject(std::ostream& os) {
   // handle Int, String, Bool separately
   os << WORD << "-1" << std::endl;	// GC tag
-  os << klass()->name() << PROTOBJ_SUFFIX << LABEL;
-  os << WORD << tag_ << std::endl;
+  os << klass()->name() << PROTOBJ_SUFFIX << LABEL; // label
+  os << WORD << tag_ << std::endl; // tag
   if (klass()->name() == String) {
     os << WORD << 5 << std::endl;
     os << WORD << klass()->name() << DISPTAB_SUFFIX << std::endl;
@@ -674,28 +661,25 @@ void CgenNode::EmitPrototypeObject(std::ostream& os) {
   } else {
     os << WORD << objectSize_ << std::endl;
     os << WORD << klass()->name() << DISPTAB_SUFFIX << std::endl;
-    for (int i = 0; i < attrVarEnv_.vars_.size(); ++i) {
-    	os << WORD << 0 << std::endl;
-    }
+    for (int i = 0; i < attrVarEnv_.vars_.size(); ++i)
+    	{ os << WORD << 0 << std::endl; }
   }
   
-
-  for (CgenNode* child : children_) {
-    child->EmitPrototypeObject(os);
-  }
+  for (CgenNode* child : children_)
+    { child->EmitPrototypeObject(os); }
 }
 
+// CgenPrototypeObjects: emit prototype objects for all classes
 void CgenKlassTable::CgenPrototypeObjects(std::ostream& os) const {
-  std::clog << "Emitting prototype objects..." << std::endl;
   root()->EmitPrototypeObject(os);
-  std::clog << "Done emitting prototype objects." << std::endl;
 }
 
+// CgenClassNameTab: emit class name table
 void CgenKlassTable::CgenClassNameTab(std::ostream& os) const {
   std::map<std::size_t,Symbol*> ordered_class_names;
-  for (CgenNode* node : nodes_) {
-    ordered_class_names[node->tag_] = node->klass()->name();
-  }
+  for (CgenNode* node : nodes_)
+    { ordered_class_names[node->tag_] = node->klass()->name(); }
+    
   for (std::pair<std::size_t,Symbol*> p : ordered_class_names) {
     bool had_length_entry = gIntTable.has(p.second->value().size());
     gStringTable.emplace(p.second->value());
@@ -717,6 +701,7 @@ void CgenKlassTable::CgenClassNameTab(std::ostream& os) const {
   }
 }
 
+// CgenClassObjTab: emit class object table
 void CgenKlassTable::CgenClassObjTab(std::ostream& os) const {
   std::map<int,Symbol*> ordered_class_names;
   for (CgenNode* node : nodes_) {
@@ -731,13 +716,12 @@ void CgenKlassTable::CgenClassObjTab(std::ostream& os) const {
 }
 
 
+// EmitInitializer: emit initializer for class
 void CgenNode::EmitInitializer(std::ostream& os) {
   attrVarEnv_.klass_ = klass(); // set current class
   attrVarEnv_.ResetTemporaryCount(); // so temporaries will be assigned to proper locs
-  //int temp_count = init_->
   os << klass()->name() << CLASSINIT_SUFFIX << LABEL;
 
-  // recursively emit initializer methods
   if (klass()->name() == Object) {
   	// do nothing
   } else {
@@ -749,6 +733,7 @@ void CgenNode::EmitInitializer(std::ostream& os) {
     emit_store(SELF, CgenARLayout_SelfPOffset+1, SP, os);
     emit_addiu(FP, SP, WORD_SIZE*1, os); // set FP to caller's saved RA
     
+    // find maximum number of temporaries needed over all attributes
     int max_temps = 0;
     for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
       if ((*feature)->attr()) {
@@ -758,14 +743,14 @@ void CgenNode::EmitInitializer(std::ostream& os) {
     }
     emit_addiu(SP, SP, -max_temps*WORD_SIZE, os); // reserve space for temps
     
-    // call initializer
+    // call parent initializer
     emit_push(RA, os);
     os << JAL;
 	emit_init_ref(parent_name, os);
 	os << std::endl;
 	emit_pop(RA, os);
 	
-	// set self Object
+	// set self for attribute initializers
 	emit_move(SELF, ACC, os);
 	
 	// initialize attributes
@@ -780,7 +765,7 @@ void CgenNode::EmitInitializer(std::ostream& os) {
 	  }
 	}
 	
-	emit_move(ACC, SELF, os);
+	emit_move(ACC, SELF, os); // current object expected in ACC
 	
 	// cleanup
 	emit_load(SELF, CgenARLayout_SelfPOffset, FP, os);
@@ -794,95 +779,11 @@ void CgenNode::EmitInitializer(std::ostream& os) {
   for (CgenNode* child : children_) {
     child->EmitInitializer(os);
   }
-  
 }
 
+// CgenClassInits: emits initializers for all classes
 void CgenKlassTable::CgenClassInits(std::ostream& os) const {
-  // call parent initializer first
-  // then initialize attributes defined in class
-  std::clog << "Emitting object initializers..." << std::endl;
   root()->EmitInitializer(os);
-  std::clog << "Done emitting object initializers." << std::endl;
-}
-
-
-void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  // need to add formals to variable environment
-  // don't need to worry about binding self in codegen
-  varEnv.ResetTemporaryCount();
-  int temp_count = body_->CalcTemps();
-  
-  // before FP (and at) -> actuals, saved values ($s0, $ra, $fp)
-  // after FP -> temporaries
-  
-  // perform callee setup
-  emit_addiu(SP, SP, -WORD_SIZE*CgenARLayout_BaseSize, os);
-  
-  emit_store(FP, CgenARLayout_FPOffset+1, SP, os);
-  emit_store(SELF, CgenARLayout_SelfPOffset+1, SP, os);
-  emit_addiu(FP, SP, WORD_SIZE*1, os); // set FP to caller's saved RA
-  emit_addiu(SP, SP, -WORD_SIZE*temp_count, os);
-  
-  emit_move(SELF, ACC, os); // bind self (expects current object in ACC)
-  
-  std::clog << "\tAdding formals to variable environment...";
-  
-  int formals_counter = formals()->size() - 1 + CgenARLayout_BaseSize; // account for storage of caller's state
-  for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
-    Formal* formal = *formals_it;
-    // need to assign location relative to FP
-    MemoryLocation* formal_loc = new IndirectLocation(formals_counter, FP);
-    varEnv.Push(formal->name(), formal_loc);
-    --formals_counter;
-  }
-  
-  std::clog << "done." << std::endl;
-  
-  // need to add # of required temporaries to SP,
-  // but don't know until after codegen for method
-  // so add label at end containing offset
-  // in form of Class.Method_SPOffset
-  
-  /*
-  emit_partial_load_address(ACC, os);
-  os << varEnv.klass_->name() << METHOD_SEP << name() << "_SPOffset" << std::endl;
-  emit_load(ACC, 0, ACC, os); // get # temporaries
-  emit_sub(SP, SP, ACC, os); // reserve slots for temporaries
-  */
-  
-  // generate method body
-  std::clog << "\tGenerating code for method body...";
-  body_->CodeGen(varEnv, os);
-  std::clog << "done." << std::endl;
-  
-  int temporaryOffset = varEnv.GetTemporaryMaxCount() * WORD_SIZE;
-    
-  //emit_load(RA, CgenARLayout_RAOffset, FP, os);
-  emit_load(SELF, CgenARLayout_SelfPOffset, FP, os);
-  emit_load(FP, CgenARLayout_FPOffset, FP, os);
-  
-  // pop entire AR off stack, including arguments from caller
-  emit_addiu(SP, SP, WORD_SIZE*CgenARLayout_BaseSize + temporaryOffset + WORD_SIZE*formals_->size(), os); // restore SP
-  
-  // return to caller
-  emit_return(os);
-  
-  /*
-  os << varEnv.klass_->name() << METHOD_SEP << name() << "_SPOffset" << LABEL;
-  os << WORD << temporaryOffset << std::endl; */
-  
-  if (varEnv.GetTemporaryMaxCount() != body_->CalcTemps())
-    { std::clog << "ERROR: temporary mismatch!" << std::endl;
-      std::clog << "\ttemporaryOffset=" << varEnv.GetTemporaryMaxCount() << ", calctemps=" << body_->CalcTemps() << std::endl; }
-  
-  // need to delete MemoryLocation ptrs
-  for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
-    Formal* formal = *formals_it;
-    // need to assign location relative to FP
-    MemoryLocation* formal_loc = varEnv.Lookup(formal->name());
-    varEnv.Pop(formal->name());
-    delete formal_loc;
-  }
 }
 
 
@@ -892,50 +793,84 @@ void CgenNode::EmitMethods(std::ostream& os) {
       if ((*feat_it)->method()) {
         Method* method = (Method*) (*feat_it);
         os << klass()->name() << METHOD_SEP << method->name() << LABEL;
-        std::clog << "Generating code for method " << method->name() << std::endl;
         attrVarEnv_.klass_ = klass();
         method->CodeGen(attrVarEnv_, os);
       }
     }
   }
   
-  // have children nodes emit method code
   for (CgenNode* child : children_) {
     child->EmitMethods(os);
   }
 }
 
+// CgenClassMethods: emit methods for all classes
 void CgenKlassTable::CgenClassMethods(std::ostream& os) const {
-  std::clog << "Emitting class methods..." << std::endl;
   root()->EmitMethods(os);
-  std::clog << "Done emitting class methods." << std::endl;
 }
 
 void CgenKlassTable::CodeGen(std::ostream& os) const {
   CgenGlobalData(os);
   CgenSelectGC(os);
   CgenConstants(os);
-
-  // Add your code to emit:
-  // - Prototype objects
-  // - class_nameTab and class_objTab
-  // - Dispatch tables for each class
-
+  
   CgenPrototypeObjects(os);
   CgenDispatchTables(os);
   CgenClassObjTab(os);
   CgenClassNameTab(os);
 
   CgenGlobalText(os);
-
-  // Add your code to emit:
-  // - Object initializers for each class
-  // - Class methods
   
   CgenClassInits(os);
   CgenClassMethods(os);
 }
 
+
+
+/* CODE GENERATION FOR AST NODES */
+void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
+  // need to add formals to variable environment
+  // don't need to worry about binding self in codegen
+  varEnv.ResetTemporaryCount();
+  int temp_count = body_->CalcTemps();
+  
+  // perform callee setup
+  emit_addiu(SP, SP, -WORD_SIZE*CgenARLayout_BaseSize, os);
+  
+  emit_store(FP, CgenARLayout_FPOffset+1, SP, os);
+  emit_store(SELF, CgenARLayout_SelfPOffset+1, SP, os);
+  emit_addiu(FP, SP, WORD_SIZE*1, os); // set FP to caller's saved RA
+  emit_addiu(SP, SP, -WORD_SIZE*temp_count, os);
+  
+  emit_move(SELF, ACC, os); // bind self
+    
+  int formals_counter = formals()->size() - 1 + CgenARLayout_BaseSize; // account for storage of caller's state
+  for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
+    Formal* formal = *formals_it;
+    // need to assign location relative to FP
+    MemoryLocation* formal_loc = new IndirectLocation(formals_counter, FP);
+    varEnv.Push(formal->name(), formal_loc);
+    --formals_counter;
+  }
+  
+  body_->CodeGen(varEnv, os); // generate method body
+  int temporaryOffset = varEnv.GetTemporaryMaxCount() * WORD_SIZE;
+    
+  emit_load(SELF, CgenARLayout_SelfPOffset, FP, os);
+  emit_load(FP, CgenARLayout_FPOffset, FP, os);
+  
+  // pop entire AR off stack, including arguments from caller
+  emit_addiu(SP, SP, WORD_SIZE*CgenARLayout_BaseSize + temporaryOffset + WORD_SIZE*formals_->size(), os);
+  emit_return(os);
+  
+  // delete MemoryLocation ptrs
+  for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
+    Formal* formal = *formals_it;
+    MemoryLocation* formal_loc = varEnv.Lookup(formal->name());
+    varEnv.Pop(formal->name());
+    delete formal_loc;
+  }
+}
 
 void BoolLiteral::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_partial_load_address(ACC, os);
@@ -979,14 +914,6 @@ void Ref::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 }
 
 void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  // 0. create new Int object -> Object.copy(Int_protObj) -> in ACC
-  // 1. evaluate lhs
-  // 2. push result in ACC onto stack
-  // 3. evaluate rhs
-  // 4. pop result off stack into T1
-  // 5. load integer values into T1 (lhs) & T2 (rhs)
-  // 6. perform op on T1, T2; put result in ACC
-  
   // is the resulting object a Bool? (otherwise an Int)
   bool bool_result = (kind_ == BO_LT || kind_ == BO_EQ || kind_ == BO_LE);
   
@@ -997,10 +924,9 @@ void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_move(RA, T5, os);
   emit_push(ACC, os);	// push new object (of Bool or Int type) onto stack
   
-  // evaluate left 
-  lhs_->CodeGen(varEnv, os);
+  lhs_->CodeGen(varEnv, os); // evaluate left first
   emit_push(ACC, os);
-  rhs_->CodeGen(varEnv, os);
+  rhs_->CodeGen(varEnv, os); // evaluate right
   emit_pop(T1, os);
   emit_move(T2, ACC, os);
   
@@ -1097,9 +1023,6 @@ void UnaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 }
 
 void Knew::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  // allocate new object
-  // 1. create new copy of appropriate class -> lookup using class tag in class_objTab
-  
   if (name_ == SELF_TYPE) {
     emit_load(ACC, TAG_OFFSET, SELF, os);
     emit_sll(ACC, ACC, LOG_WORD_SIZE+1, os); // offset of protObj of dynamic type
@@ -1108,11 +1031,8 @@ void Knew::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
     emit_addu(T5, T5, ACC, os);
     emit_load(ACC, 0, T5, os);
     
-    //emit_move(T5, RA, os);
     emit_push(RA, os);
-    emit_copy(os);
-    //emit_move(RA, T5, os);
-    // ACC contains pointer to uninitialized copy
+    emit_copy(os); // ACC contains pointer to uninitialized copy
     emit_addiu(T5, T5, 4, os);  // now points to init method of dynamic type
     emit_load(T1, 0, T5, os); // $t1 now contains address of init method
     emit_jalr(T1, os);
@@ -1132,10 +1052,8 @@ void KaseBranch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   MemoryLocation* case_branch_var = new IndirectLocation(-varEnv.IncTemporaryCount(), FP);
   varEnv.Push(name_, case_branch_var);
   
-  // duplicate object already created in heap
-  // expect address of copy to be in register T1
+  // expect address to be in register T1
   case_branch_var->emit_store_to_loc(T1, os); // store to assigned temporary slot
-  //case_branch_var->emit_store_address_to_loc(T1, os); 
   int class_tag = gCgenKlassTable->TagFind(decl_type_);
   emit_load_imm(T2, class_tag, os);
   emit_store(T2, TAG_OFFSET, T1, os); // change type of object to match case branch
@@ -1156,13 +1074,11 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   const int case_esac = label_counter+5;
   label_counter += 6;
 
-  // evaluate case expr
-  input_->CodeGen(varEnv, os);
-  // check if void
-  emit_beqz(ACC, case_abort2, os);
-  
+  input_->CodeGen(varEnv, os);  // evaluate case expr
+  emit_beqz(ACC, case_abort2, os); // abort if void
   emit_load(T1, TAG_OFFSET, ACC, os); // get type of input
   
+  // generate sets of class tags that inherit from declared type of each case branch
   std::map<CgenNode::ClassTag, CgenNode::ClassTagSet> class_tag_sets;
   for (KaseBranch* kase_branch : *cases_) {
     CgenNode* node = gCgenKlassTable->ClassFind(kase_branch->decl_type());
@@ -1215,14 +1131,13 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
     CgenNode::ClassTag branch_tag = gCgenKlassTable->TagFind(branch->decl_type());
     int branch_label = label_counter++;
     tags_to_labels[branch_tag] = branch_label;
-    //int branch_label = tags_to_labels[branch_tag];
     emit_label_def(branch_label, os);
     branch->CodeGen(varEnv, os);
     emit_branch(case_esac, os);
   }
   
-  
-  // iteratively find shortest list, then output code
+  // iteratively find shortest list (guaranteed to be least or have no children among remaining types )
+  // output list of "qualifying" class tags
   // (use O(n^2) algorithm for now -- maybe improve later?
   emit_label_def(case_table, os); // beginning of table
   while (!class_tag_sets.empty()) {
@@ -1245,9 +1160,8 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
     for (CgenNode::ClassTagSet::iterator tag_it = tag_set.begin(); tag_it != tag_set.end(); ++tag_it) {
       os << WORD << *tag_it << std::endl;
     }
-    // mark end of 'hit' list with -1
+    // mark end of qualifying list with -1
     os << WORD << -1 << std::endl;
-    
     class_tag_sets.erase(min_branch);
   }
   // emit final -1 to indicate runtime error, i.e. no branches matched
@@ -1257,7 +1171,7 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 }
 
 void Let::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  // don't need to handle SELF_TYPE specially
+  // SELF_TYPE not allowed, so don't need to consider
   MemoryLocation* let_var = new IndirectLocation(-varEnv.IncTemporaryCount(), FP);
   varEnv.init_type_ = decl_type_;
   
@@ -1282,7 +1196,7 @@ void Block::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 void Loop::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   int label_loop_pred = label_counter++;
   int label_loop_end = label_counter++;
-  // evaluate predicate
+  
   emit_label_def(label_loop_pred, os);
   pred_->CodeGen(varEnv, os);
   emit_fetch_bool(ACC, ACC, os);
@@ -1295,7 +1209,6 @@ void Loop::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 }
 
 void Cond::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  // define labels
   int label_else = label_counter++;
   int label_fi = label_counter++;
   
@@ -1318,16 +1231,17 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   const int dispatch_abort = label_counter+1;
   label_counter += 2;
   
-  // perform caller AR prep
-  // evaluate actuals, push onto stack
+  // 1. evaluate actuals
+  // 2. evaluate receiver
+  
   emit_push(RA, os);
   for (Expression* expr : *actuals_) {
     expr->CodeGen(varEnv, os);
     emit_push(ACC, os);
   }
-  // evaluate expression left of '.'
+
   receiver_->CodeGen(varEnv, os);
-  emit_beqz(ACC, dispatch_abort, os); // check if void
+  emit_beqz(ACC, dispatch_abort, os); // abort if void
   
   // call static method on given class
   emit_partial_load_address(T1, os);
@@ -1346,7 +1260,6 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // dispatch end
   emit_label_def(dispatch_end, os);
   emit_pop(RA, os);
-  
 }
 
 void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
@@ -1359,11 +1272,11 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
     expr->CodeGen(varEnv, os);
     emit_push(ACC, os);
   }
+  
   receiver_->CodeGen(varEnv, os);
   emit_beqz(ACC, dispatch_abort, os); // check if void
   
-  // get pointer to dispatch table of receiver
-  emit_load(T1, DISPTABLE_OFFSET, ACC, os);
+  emit_load(T1, DISPTABLE_OFFSET, ACC, os);  // get pointer to dispatch table of receiver
   
   MemoryLocation* method_offset;
   if (receiver_->type() == SELF_TYPE) {
