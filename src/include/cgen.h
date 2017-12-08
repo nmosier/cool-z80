@@ -40,6 +40,9 @@ limitations under the License.
 #include "ast.h"
 #include "ast_consumer.h"
 
+#include <list>
+#include <set>
+
 extern bool cgen_optimize;       // optimize switch for code generator
 extern bool disable_reg_alloc;
 
@@ -64,6 +67,13 @@ namespace cool {
  */
 extern bool gCgenDebug;
 
+#define CgenObjectLayout_AttributeOffset 3	// in words (not bytes)
+
+#define CgenARLayout_BaseSize 2 // # of constant fields in each AR (excludes actuals + return address)
+#define CgenARLayout_FPOffset 1 // from callee's FP
+#define CgenARLayout_SelfPOffset 0 // from callee's FP
+//#define CgenARLayout_RAOffset 0 // from callee's FP
+
 /**
  * Main entry point for code generation
  * @param program Program AST node
@@ -74,6 +84,76 @@ void Cgen(Program* program, std::ostream& os);
 // Forward declarations
 class CgenKlassTable;
 
+
+class MemoryLocation {
+ public:
+  MemoryLocation(int offset): offset_(offset) {}
+  virtual ~MemoryLocation() {}
+  
+  int offset() { return offset_; }
+
+  virtual bool isindirect() { return false; }
+  virtual bool isabsolute() { return false; }
+  virtual void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {}
+  virtual void emit_load_from_loc(const char* dest_reg, std::ostream& s) {}
+  virtual void emit_store_to_loc(const char* src_reg, std::ostream& s) {}
+private:
+  int offset_;
+};
+
+class IndirectLocation : public MemoryLocation {
+ public:
+  IndirectLocation(int offset, const char* base_reg): MemoryLocation(offset), base_reg_(base_reg) {}
+  
+  const char* base_reg() { return base_reg_; }
+  bool isindirect() override { return true; }
+  void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
+  void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
+  void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
+ private:
+  const char* base_reg_;
+};
+
+class AbsoluteLocation : public MemoryLocation {
+ public:
+  AbsoluteLocation(int offset, std::string label): MemoryLocation(offset), label_(label) {}
+  
+  std::string label() { return label_; }
+  bool isabsolute() override { return true; }
+  void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
+  void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
+  void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
+ private:
+  std::string label_;
+};
+
+typedef std::unordered_map<Symbol*,MemoryLocation*> DispatchTable;
+typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
+class VariableEnvironment {
+ public:
+  VariableEnvironment(Klass* klass): temporary_count_(0), temporary_max_count_(0), klass_(klass), init_type_(nullptr) {}
+  
+  void Push(Symbol* var, MemoryLocation* offset) { vars_[var].push_back(offset); }
+  void Pop(Symbol* var) { vars_[var].pop_back(); }
+  MemoryLocation* Lookup(Symbol* var) { return vars_[var].back(); }	// returns offset  
+  
+  int GetTemporaryCount() { return temporary_count_; }
+  int GetTemporaryMaxCount() { return temporary_max_count_; }
+  int IncTemporaryCount() {
+    temporary_max_count_ = std::max(++temporary_count_, temporary_max_count_);
+    return temporary_count_;
+  }
+  int DecTemporaryCount() { return --temporary_count_; }
+  int ResetTemporaryCount() { return (temporary_max_count_ = temporary_count_ = 0); }
+  
+  int temporary_count_;
+  int temporary_max_count_;
+  Klass* klass_;
+  Symbol* init_type_; // only used for generating NoExpr's, but needs to be updated before every object initialization
+  std::unordered_map<Symbol*,std::list<MemoryLocation*>> vars_;	// use list to encapsulate scopes 
+};
+
+
 /**
  * Node in the code generation inheritance graph
  *
@@ -81,8 +161,32 @@ class CgenKlassTable;
  */
 class CgenNode : public InheritanceNode<CgenNode> {
  public:
-  CgenNode(Klass* klass, bool inheritable, bool basic) : InheritanceNode(klass, inheritable, basic), tag_(0) {}
-
+  typedef std::size_t ClassTag;
+  typedef std::set<ClassTag> ClassTagSet;
+  typedef std::unordered_map<Symbol*,Symbol*> MethodInheritanceTable;
+ 
+  CgenNode(Klass* klass, bool inheritable, bool basic) : InheritanceNode(klass, inheritable, basic), tag_(0), attrVarEnv_(klass), objectSize_(3) {}
+  ~CgenNode() {
+    for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
+      if ((*feature)->attr()) {
+        Symbol* attr_name = (*feature)->name();
+        delete attrVarEnv_.vars_[attr_name].front();
+        attrVarEnv_.vars_[attr_name].pop_front();
+      }
+    }
+  }
+  
+  /*
+   * Return list of class tags contained in subtree rooted at node
+   * (for use in case expression)
+   */
+  void GetSubtreeClassTags(ClassTagSet& tags) {
+    for (CgenNode* child : children_) {
+      child->GetSubtreeClassTags(tags);
+    }
+    tags.insert(tag_);
+  }
+  
  private:
   /**
    * Unique integer tag for class.
@@ -95,9 +199,23 @@ class CgenNode : public InheritanceNode<CgenNode> {
    * during the initialization of the node. Other than that the tags are unique, there is no specific
    * ordering requirement.
    */
-  std::size_t tag_;
-
-
+  ClassTag tag_;
+  
+  /* stores base variable environment, including only attributes
+     to be used during recursive code generation
+   */
+  VariableEnvironment attrVarEnv_;
+  unsigned int objectSize_;
+  
+  void CreateAttrVarEnv(int next_offset);
+  void CreateDispatchTables(DispatchTables& tables, int next_offset);
+  
+  void EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t);
+  void EmitPrototypeObject(std::ostream& os);
+  
+  void EmitInitializer(std::ostream& os);
+  void EmitMethods(std::ostream& os);
+  
   friend class CgenKlassTable;
 };
 
@@ -111,10 +229,23 @@ class CgenKlassTable : public KlassTable<CgenNode> {
    * @param name Class name
    * @return tag
    */
-  std::size_t TagFind(Symbol* name) const {
+  CgenNode::ClassTag TagFind(Symbol* name) const {
     auto node = ClassFind(name);
     assert(node);
     return node->tag_;
+  }
+  
+  /*
+   * Returns whether two nodes inherit from one another
+   * Note: strictly less than ( < ) relationship
+   */
+  bool InheritsFrom(CgenNode* child, CgenNode* parent) {
+    bool isparent = true;
+    while (child != parent && child != root()) {
+      child = child->parent();
+      isparent = false;
+    }
+    return !isparent && child == parent;
   }
 
   /**
@@ -152,6 +283,36 @@ class CgenKlassTable : public KlassTable<CgenNode> {
    * @param os std::ostream to write generated code to
    */
   void CgenGlobalText(std::ostream& os) const;
+  
+  /**
+   * Emit code for dispatch tables
+   */
+  void CgenDispatchTables(std::ostream& os) const;
+  
+  /**
+   * Emit code for prototype objects (except for predefined classes)
+   */
+  void CgenPrototypeObjects(std::ostream& os) const;
+  
+  /**
+   * Emit code for class_nameTab
+   */
+  void CgenClassNameTab(std::ostream& os) const;
+  
+  /**
+   * Emit code ofr class_objTab
+   */
+  void CgenClassObjTab(std::ostream& os) const;
+  
+  /**
+   * Emit code for class initializers
+   */
+  void CgenClassInits(std::ostream& os) const;
+  
+  /**
+   * Emit code for class methods
+   */
+  void CgenClassMethods(std::ostream& os) const;
 
 };
 

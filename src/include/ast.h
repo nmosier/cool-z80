@@ -50,6 +50,8 @@ class InheritanceGraphNode;
 class SemantEnv;
 class SemantError;
 
+class VariableEnvironment;
+
 /// Abstract base class for all AST Nodes
 class ASTNode {
  public:
@@ -177,6 +179,7 @@ class Method : public Feature {
   Formals::const_iterator formals_end() const { return formals_->end(); }
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os);
 
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
@@ -216,7 +219,9 @@ class Expression : public ASTNode {
 
   void DumpType(std::ostream& os, size_t level, bool with_types) const;
 
-  virtual void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) {};
+  virtual void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) {}
+  virtual void CodeGen(VariableEnvironment& varEnv, std::ostream& os) {}
+  virtual int CalcTemps() { return 0; }
 
  protected:
   Symbol* type_;
@@ -230,6 +235,8 @@ class Assign : public Expression {
   static Assign* Create(Symbol* name, Expression* value, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return value_->CalcTemps(); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -247,6 +254,12 @@ class Dispatch : public Expression {
                           SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override {
+    int max_temps = 0;
+    for (Expression* expr : *actuals_) { max_temps = std::max(max_temps, expr->CalcTemps()); }
+    return std::max(max_temps, receiver_->CalcTemps());
+  }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -265,6 +278,7 @@ class StaticDispatch : public Dispatch {
                                 Expressions* actuals, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -282,6 +296,8 @@ class Cond : public Expression {
                       SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return std::max(pred_->CalcTemps(), std::max(then_branch_->CalcTemps(), else_branch_->CalcTemps())); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -299,6 +315,8 @@ class Loop : public Expression {
   static Loop* Create(Expression* pred, Expression* body, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return std::max(pred_->CalcTemps(), body_->CalcTemps()); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -315,6 +333,13 @@ class Block : public Expression {
   static Block* Create(Expressions* body, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override {
+    int max_temps = 0;
+    for (Expression* expr:*body_)
+      { max_temps = std::max(max_temps, expr->CalcTemps()); }
+    return max_temps;
+  }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -330,6 +355,8 @@ class Let : public Expression {
                      SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return std::max(init_->CalcTemps(), body_->CalcTemps()+1); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -348,6 +375,14 @@ class Kase : public Expression {
   static Kase* Create(Expression* input, KaseBranches* cases, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override {
+    int max_temps = 0;
+    for (KaseBranch* case_branch : *cases_) {
+      Expression* expr = (Expression*) (case_branch);
+      max_temps = std::max(max_temps, expr->CalcTemps()); }
+    return std::max(max_temps, input_->CalcTemps());
+  }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -366,13 +401,15 @@ class KaseBranch : public Expression {
   Symbol* decl_type() const { return decl_type_; }
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return 1+body_->CalcTemps(); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
   Symbol* name_;
   Symbol* decl_type_;
   Expression* body_;
-
+  
   KaseBranch(Symbol* name, Symbol* decl_type, Expression* body, SourceLoc loc)
       : Expression(loc), name_(name), decl_type_(decl_type), body_(body) {}
 };
@@ -383,6 +420,7 @@ class Knew : public Expression {
   static Knew* Create(Symbol* name, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -399,6 +437,8 @@ class UnaryOperator : public Expression {
   static UnaryOperator* Create(UnaryKind kind, Expression* input, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return input_->CalcTemps(); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -421,6 +461,8 @@ class BinaryOperator : public Expression {
   const char* KindAsString() const;
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
+  int CalcTemps() override { return std::max(lhs_->CalcTemps(), rhs_->CalcTemps()); }
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -438,6 +480,7 @@ class Ref : public Expression {
   static Ref* Create(Symbol* name, SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -452,6 +495,7 @@ class NoExpr : public Expression {
   static NoExpr* Create(SourceLoc loc = 0);
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -468,6 +512,7 @@ class StringLiteral : public Expression {
   const std::string& value() const { return value_->value(); }
   
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
   friend std::ostream& operator<<(std::ostream& os, const StringLiteral* s) {
@@ -489,6 +534,7 @@ class IntLiteral : public Expression {
   int32_t value() const { return value_->value(); }
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
@@ -505,6 +551,7 @@ class BoolLiteral : public Expression {
   bool value() const { return value_; }
 
   void TypeCheck(InheritanceGraph& g, SemantEnv& env, Klass* klass) override;
+  void CodeGen(VariableEnvironment& varEnv, std::ostream& os) override;
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:

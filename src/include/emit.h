@@ -104,6 +104,8 @@ Register const A1   = "$a1";		// For arguments to prim functions
 Register const SELF = "$s0";		// Pointer to self (callee saves)
 Register const T1   = "$t1";		// Temporary 1 
 Register const T2   = "$t2";		// Temporary 2 
+Register const T3 	= "$t3";		// Temporary 3
+Register const T5	= "$t5";		// Temporary 5 -- not destroyed by support code functions
 Register const SP   = "$sp";		// Stack pointer 
 Register const FP   = "$fp";		// Frame pointer 
 Register const RA   = "$ra";		// Return address 
@@ -120,7 +122,8 @@ inline bool regEq(Register r1, Register r2) { return r1 == r2; }
 // Opcodes
 //
 #define JALR  "\tjalr\t"  
-#define JAL   "\tjal\t"                 
+#define JAL   "\tjal\t"  
+#define JR	  "\tjr\t"               
 #define RET   "\tjr\t$ra\t"
 
 #define SW    "\tsw\t"
@@ -129,6 +132,7 @@ inline bool regEq(Register r1, Register r2) { return r1 == r2; }
 #define LA    "\tla\t"
 
 #define MOVE  "\tmove\t"
+#define MOVN  "\tmovn\t"
 #define NEG   "\tneg\t"
 #define ADD   "\tadd\t"
 #define ADDI  "\taddi\t"
@@ -144,6 +148,7 @@ inline bool regEq(Register r1, Register r2) { return r1 == r2; }
 #define BNE      "\tbne\t"
 #define BLEQ     "\tble\t"
 #define BLT      "\tblt\t"
+#define BLTZ	"\tbltz\t"
 #define BGT      "\tbgt\t"
 
-
+#define XORI	"\txori\t"
