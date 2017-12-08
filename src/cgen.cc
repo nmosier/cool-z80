@@ -528,7 +528,6 @@ CgenKlassTable::CgenKlassTable(Klasses* klasses) {
   // build inheritance graph (connect nodes) and assign tags
   unsigned int tag = 0;
   for (CgenNode* isolated_node : nodes_) {
-    std::clog << isolated_node->klass()->name() << ":" << tag << std::endl;
   	isolated_node->tag_ = tag++;
     CgenNode* parent_node = ClassFind(isolated_node->parent_name());
     parent_node->children_.push_back(isolated_node);
