@@ -47,9 +47,7 @@ limitations under the License.
 //
 ///////////////////////////////////////////////////////////////////////
 
-typedef char const* Register;
-
-#define WORD_SIZE    4
+#define WORD_SIZE    2
 #define LOG_WORD_SIZE 2     // For logical shifts
 
 // Global names
@@ -59,6 +57,7 @@ typedef char const* Register;
 #define BOOLTAG              "_bool_tag"
 #define STRINGTAG            "_string_tag"
 #define HEAP_START           "heap_start"
+#define INHERITANCE_TREE	 "inheritance_tree"
 
 // Naming conventions
 #define DISPTAB_SUFFIX       "_dispTab"
@@ -91,64 +90,65 @@ typedef char const* Register;
 #define INT_SLOTS         1
 #define BOOL_SLOTS        1
 
-#define GLOBAL        "\t.globl\t"
-#define ALIGN         "\t.align\t2\n"
-#define WORD          "\t.word\t"
+// #define GLOBAL        "\t.globl\t"
+// #define ALIGN         "\t.align\t2\n"
+// #define WORD          "\t.word\t"
+#define DW            "\t.dw\t"
+#define DB            "\t.db\t"
 
 //
 // register names
 //
-Register const ZERO = "$zero";		// Zero register 
-Register const ACC  = "$a0";		// Accumulator 
-Register const A1   = "$a1";		// For arguments to prim functions
-Register const SELF = "$s0";		// Pointer to self (callee saves)
-Register const T1   = "$t1";		// Temporary 1 
-Register const T2   = "$t2";		// Temporary 2 
-Register const T3 	= "$t3";		// Temporary 3
-Register const T5	= "$t5";		// Temporary 5 -- not destroyed by support code functions
-Register const SP   = "$sp";		// Stack pointer 
-Register const FP   = "$fp";		// Frame pointer 
-Register const RA   = "$ra";		// Return address 
+// Register const ZERO = "$zero";		// Zero register 
+// Register const ACC  = "$a0";		// Accumulator 
+// Register const A1   = "$a1";		// For arguments to prim functions
+// Register const SELF = "$s0";		// Pointer to self (callee saves)
+// Register const T1   = "$t1";		// Temporary 1 
+// Register const T2   = "$t2";		// Temporary 2 
+// Register const T3 	= "$t3";		// Temporary 3
+// Register const T5	= "$t5";		// Temporary 5 -- not destroyed by support code functions
+// Register const SP   = "$sp";		// Stack pointer 
+// Register const FP   = "$fp";		// Frame pointer 
+// Register const RA   = "$ra";		// Return address
 
-
-/**
- * Return true if registers are the same
- *
- * Assumes r1 and r2 are pointers to shared register labels, and so performs just checks for equal pointers
- */
-inline bool regEq(Register r1, Register r2) { return r1 == r2; }
 
 //
 // Opcodes
 //
-#define JALR  "\tjalr\t"  
-#define JAL   "\tjal\t"  
-#define JR	  "\tjr\t"               
-#define RET   "\tjr\t$ra\t"
+#define CALL "\tcall\t"
+#define JR   "\tjr\t"
+#define JP   "\tjp\t"
+#define RET	 "\tret\t"
 
-#define SW    "\tsw\t"
-#define LW    "\tlw\t"
-#define LI    "\tli\t"
-#define LA    "\tla\t"
+#define PUSH "\tpush\t"
+#define POP  "\tpop\t"
 
-#define MOVE  "\tmove\t"
-#define MOVN  "\tmovn\t"
-#define NEG   "\tneg\t"
-#define ADD   "\tadd\t"
-#define ADDI  "\taddi\t"
-#define ADDU  "\taddu\t"
-#define ADDIU "\taddiu\t"
-#define DIV   "\tdiv\t"
-#define MUL   "\tmul\t"
-#define SUB   "\tsub\t"
-#define SLL   "\tsll\t"
-#define BEQZ  "\tbeqz\t"
-#define BRANCH   "\tb\t"
-#define BEQ      "\tbeq\t"
-#define BNE      "\tbne\t"
-#define BLEQ     "\tble\t"
-#define BLT      "\tblt\t"
-#define BLTZ	"\tbltz\t"
-#define BGT      "\tbgt\t"
+#define LD   "\tld\t"
 
-#define XORI	"\txori\t"
+#define EX   "\tex\t"
+
+#define SCF  "\tscf"
+#define CCF  "\tccf"
+#define BIT  "\tbit\t"
+
+#define CP   "\tcp\t"
+#define DJNZ "\tdjnz\t"
+#define RLA  "\trla"
+#define RLCA "\trlca"
+#define RL   "\trl\t"
+
+#define NEG  "\tneg\t"
+#define CPL	 "\tcpl\t"
+#define ADD  "\tadd\t"
+#define ADC  "\tadc\t"
+#define SUB  "\tsub\t"
+#define SBC  "\tsbc\t"
+#define INC  "\tinc\t"
+#define DEC  "\tdec\t"
+
+#define SLA  "\tsla\t"
+#define SRA  "\tsra\t"
+#define SRL  "\tsrl\t"
+#define AND	 "\tand\t"
+#define OR   "\tor\t"
+#define XOR  "\txor\t"

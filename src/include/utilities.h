@@ -95,4 +95,22 @@ inline std::ostream& pad(std::ostream& out, int padding) {
   return out;
 }
 
+// convert enum to integer value
+template <typename T>
+int etoi(const T e);
+
+template <typename T>
+struct unordered_pair {
+	unordered_pair(T first_, T second_): first(first_), second(second_) {}
+	~unordered_pair() {}
+	T first;
+	T second;
+};
+
+template <typename T>
+bool operator==(const unordered_pair<T>& lhs, const unordered_pair<T>& rhs);
+
+template <typename T>
+bool operator!=(const unordered_pair<T>& lhs, const unordered_pair<T>& rhs);
+
 } // namespace cool

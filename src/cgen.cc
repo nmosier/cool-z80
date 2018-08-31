@@ -35,10 +35,16 @@ limitations under the License.
 
 #include <iostream>
 #include <algorithm>
+#include <assert.h>
 #include "cgen.h"
+#include "cgen_routines.h"
 
 #include <map>
+#include <cmath>
+#include <deque>
+#include <exception>
 
+using namespace cool;
 
 Memmgr cgen_Memmgr = GC_NOGC;      // enable/disable garbage collection
 Memmgr_Test cgen_Memmgr_Test = GC_NORMAL;  // normal/test GC
@@ -68,97 +74,357 @@ static const char *gc_collect_names[] =
 //  There is an emit_X for each opcode X, as well as emit_ functions
 //  for generating names according to the naming conventions (see emit.h)
 //  and calls to support functions defined in the trap handler.
-//
+//            
 //////////////////////////////////////////////////////////////////////////////
 
-static void emit_load(const char *dest_reg, int offset, const char *source_reg, std::ostream& s)
-{
-  s << LW << dest_reg << " " << offset * WORD_SIZE << "(" << source_reg << ")"
-    << std::endl;
+template <typename T, typename U>
+void emit_load(const RegisterValue& dst, const ImmediateValue<T,U>& src, std::ostream& os) {
+	assert (dst.size() == src.size());
+	os << LD << dst << "," << src << std::endl;
+}
+template <typename T, typename U>
+void emit_load(const RegisterPointer& dst, const ImmediateValue<T,U>& src, std::ostream& os) {
+	switch (src.size()) {
+	case 1:
+		os << LD << dst << "," << src << std::endl;
+		break;
+	case 2:
+		os << LD << dst << "," << src.low() << std::endl;
+		os << INC << dst.reg() << std::endl;
+		os << LD << dst << "," << src.high() << std::endl;
+		os << DEC << dst.reg() << std::endl;
+		break;
+	default:
+		std::string msg = std::string("ImmediateValue (src)must be of size 1 or 2, but is of size ") + std::string(src.size());
+		std::cerr << msg << std::endl;
+		throw msg;
+	}
+}
+void emit_load(const RegisterValue& dst, const LabelValue& src, std::ostream& os) {
+	assert (dst.size() == src.size());
+	os << LD << dst << "," << src << std::endl;
+}
+void emit_load(const RegisterPointer& dst, const LabelValue& src, std::ostream& os) {
+	os << LD << dst << "," << src << std::endl;
+}
+void emit_load(const RegisterValue& dst, const RegisterValue& src, std::ostream& os) {
+	assert (dst.size() == src.size());
+	assert (!src.reg() || *src.reg() != SP);
+
+	if (dst.size() == 1) {
+		os << LD << dst << "," << src << std::endl;
+	} else if (dst.size() == 2) {
+		const Register16 *dst_reg = (const Register16 *) dst.reg(), *src_reg = (const Register16 *) src.reg();
+		if (*dst_reg == SP) {
+			assert (*src_reg == rHL || *src_reg == rIX || *src_reg == rIY);
+			os << LD << *dst_reg << "," << *src_reg << std::endl;
+		} else {
+			os << LD << dst_reg->high() << "," << src_reg->high() << std::endl;
+			os << LD << dst_reg->low() << "," << src_reg->low() << std::endl;
+		}
+	} else {
+		std::cerr << "register values of mismatching sizes" << std::endl;
+		throw "register values of mismatching sizes";
+	}
+}
+void emit_load(const MemoryValue& dst, const RegisterValue& src, std::ostream& os) {
+	if (dst.loc().kind() == MemoryLocation::Kind::ABS) {
+		if (src.size() == 1) {
+			assert (src.reg() && *src.reg() == ACC);
+		}
+		os << LD << dst << "," << src << std::endl;
+	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR) {
+			const RegisterPointer& ptr = (const RegisterPointer&) dst.loc();
+			assert (ptr.reg() != *src.reg()); // this allows operations such as ld (hl),h ... but maybe that's ok
+			if (ptr.reg() != rHL) {
+				assert (*src.reg() == ACC);		 // ld (bc),a and ld (de),a only allowed
+			}
+			if (src.size() == 1) {
+				os << LD << dst << "," << src << std::endl;
+			} else {
+				const Register16& src_reg = (const Register16&) *src.reg();
+				os << LD << dst << "," << src_reg.low() << std::endl;
+				os << INC << *dst.reg() << std::endl;
+				os << LD << dst << "," << src_reg.high() << std::endl;
+				os << DEC << *dst.reg() << std::endl;
+			}
+	} else {
+			assert (dst.loc().kind() == MemoryLocation::Kind::PTR_OFF);
+			const RegisterPointerOffset& ptr_off = (const RegisterPointerOffset&) dst.loc();
+			assert (ptr_off.reg() != *src.reg());
+			if (src.size() == 1) {
+				os << LD << dst << "," << src << std::endl;
+			} else {
+				const Register16& src_reg = (const Register16&) *src.reg();
+				os << LD << dst << "," << src_reg.low() << std::endl;				
+				os << LD << dst[1] << "," << src_reg.high() << std::endl;
+			}
+	}	
 }
 
-static void emit_store(const char *source_reg, int offset, const char *dest_reg, std::ostream& s)
-{
-  s << SW << source_reg << " " << offset * WORD_SIZE << "(" << dest_reg << ")"
-    << std::endl;
+void emit_load(const RegisterValue& dst, const MemoryValue& src, std::ostream& os) {
+
+	if (src.loc().kind() == MemoryLocation::Kind::ABS) {
+		if (dst.size() == 1) {
+			assert (*src.reg() == ACC);
+		}
+		os << LD << dst << "," << src << std::endl;
+	} else if (src.loc().kind() == MemoryLocation::Kind::PTR) {
+		const RegisterPointer& src_ptr = (const RegisterPointer&) src.loc();
+		const Register16& src_ptr_reg = (const Register16&) src_ptr.reg();
+		if (dst.size() == 1) {
+			assert (*dst.reg() != src_ptr_reg.high() && *dst.reg() != src_ptr_reg.low());
+			os << LD << dst << "," << src << std::endl;
+		} else {
+			const Register16& dst_reg = (const Register16&) *dst.reg();
+			assert (dst.size() == 2 && *dst.reg() != src_ptr_reg);
+			os << LD << dst_reg.low() << "," << src << std::endl;
+			os << INC << src_ptr_reg << std::endl;
+			os << LD << dst_reg.high() << "," << src << std::endl;
+			os << DEC << src_ptr_reg << std::endl;
+		}
+	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
+		const RegisterPointerOffset& loc = (const RegisterPointerOffset&) src.loc();
+		const Register16& dst_reg = (const Register16&) *dst.reg();
+		if (dst.size() == 1) {
+			os << LD << dst << "," << src << std::endl;
+		} else if (dst.size() == 2) {
+			os << LD << dst_reg.low() << "," << MemoryValue(loc) << std::endl;
+			os << LD << dst_reg.high() << "," << MemoryValue(loc[1]) << std::endl;
+		} else {
+			std::cerr << "invalid size of dst" << std::endl;
+			throw "invalid size of dst";
+		}
+	}	else {
+		std::cerr << "unknown type of memory location" << std::endl;
+		throw "unknown type of memory location";
+	}
 }
 
-static void emit_load_imm(const char *dest_reg, int val, std::ostream& s)
-{ s << LI << dest_reg << " " << val << std::endl; }
 
-static void emit_load_address(const char *dest_reg, const char *address, std::ostream& s)
-{ s << LA << dest_reg << " " << address << std::endl; }
-
-static void emit_partial_load_address(const char *dest_reg, std::ostream& s)
-{ s << LA << dest_reg << " "; }
-
-
-static void emit_move(const char *dest_reg, const char *source_reg, std::ostream& s)
-{
-  if (regEq(dest_reg, source_reg)) {
-    if (cool::gCgenDebug) {
-      std::cerr << "    Omitting move from "
-                << source_reg << " to " << dest_reg << std::endl;
-      s << "#";
-    } else
-      return;
-  }
-  s << MOVE << dest_reg << " " << source_reg << std::endl;
+static void emit_neg(const Register& dst, std::ostream& s) {
+	if (dst.size() == 1) {
+		emit_load(ACC, dst, s);
+		s << NEG << std::endl;
+		emit_load(dst, ACC, s);
+	} else if (dst.size() == 2) {
+		const Register16& reg = (const Register16&) dst;
+		emit_load(ACC, reg.low(), s);
+		s << CPL << std::endl;
+		emit_load(reg.low(), ACC, s);
+		emit_load(ACC, reg.high(), s);
+		s << CPL << std::endl;
+		emit_load(reg.high(), ACC, s);
+		s << INC << dst << std::endl;	
+	} else {
+		assert (false);
+	}
 }
 
-static void emit_neg(const char *dest, const char *src1, std::ostream& s)
-{ s << NEG << dest << " " << src1 << std::endl; }
+static void emit_cpl(const Register& dst, std::ostream& s) {
+	if (dst.size() == 1) {
+		emit_load(ACC, dst, s);
+		s << CPL << std::endl;
+		emit_load(dst, ACC, s);
+	} else if (dst.size() == 2) {
+		const Register16& dst_ = (const Register16&) dst;
+		emit_load(ACC, dst_.low(), s);
+		s << CPL << std::endl;
+		emit_load(dst_.low(), ACC, s);
+		emit_load(ACC, dst_.high(), s);
+		s << CPL << std::endl;
+		emit_load(dst_.high(), ACC, s);
+	} else {
+		assert (false);
+	}
+}
 
-static void emit_add(const char *dest, const char *src1, const char* src2, std::ostream& s)
-{ s << ADD << dest << " " << src1 << " " << src2 << std::endl; }
+static void emit_add(const RegisterValue& dst, const RegisterValue& src, std::ostream& s) {
+	assert (dst.reg() && (*dst.reg() == ACC || *dst.reg() == rIX || *dst.reg() == rIY || *dst.reg() == rHL));
+	s << ADD << dst << "," << src << std::endl;
+}
 
-static void emit_addu(const char *dest, const char *src1, const char* src2, std::ostream& s)
-{ s << ADDU << dest << " " << src1 << " " << src2 << std::endl; }
+static void emit_add(const RegisterValue& dst, const Immediate8& src, std::ostream& s) {
+	assert (dst.reg() && *dst.reg() == ACC);
+	s << ADD << dst << "," << src << std::endl;
+}
 
-static void emit_addiu(const char *dest, const char *src1, int imm, std::ostream& s)
-{ s << ADDIU << dest << " " << src1 << " " << imm << std::endl; }
+static void emit_add(const RegisterValue& dst, const MemoryValue& src, std::ostream& s) {
+	assert (dst.reg() && *dst.reg() == ACC);
+	if (src.loc().kind() == MemoryLocation::Kind::PTR) assert (src.reg() && *src.reg() == rHL);
+	else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) ;
+	else {
+	std::cerr << "can only add (hl) or (ix+*) or (iy+*) to ACC" << std::endl;
+	throw "can only add (hl) or (ix+*) or (iy+*) to ACC";
+	}
+	s << ADD << dst << "," << src << std::endl;
+}
 
-static void emit_binop(const char* op, const char *dest, const char *src1, const char* src2, std::ostream& s)
-{ s << op << dest << " " << src1 << " " << src2 << std::endl; }
+static void emit_adc(const RegisterValue& dst, const RegisterValue& src, std::ostream& s) {
+	assert (dst.reg() && (*dst.reg() == ACC || *dst.reg() == rIX || *dst.reg() == rHL));
+	s << ADC << dst << "," << src << std::endl;
+}
 
-static void emit_div(const char *dest, const char *src1, const char* src2, std::ostream& s)
-{ s << DIV << dest << " " << src1 << " " << src2 << std::endl; }
+static void emit_adc(const RegisterValue& dst, const Immediate8& src, std::ostream& s) {
+	assert (dst.reg() && *dst.reg() == ACC);
+	s << ADC << dst << "," << src << std::endl;
+}
 
-static void emit_mul(const char *dest, const char *src1, const char* src2, std::ostream& s)
-{ s << MUL << dest << " " << src1 << " " << src2 << std::endl; }
+static void emit_adc(const RegisterValue& dst, const MemoryValue& src, std::ostream& s) {
+	assert (dst.reg() && *dst.reg() == ACC);
+	if (src.loc().kind() == MemoryLocation::Kind::PTR) assert (src.reg() && *src.reg() == rHL);
+	else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) ;
+	else {
+		std::cerr << "can only add (hl) or (ix+*) or (iy+*) to ACC" << std::endl;
+		throw "can only add (hl) or (ix+*) or (iy+*) to ACC";
+	}
+	s << ADC << dst << "," << src << std::endl;
+}
 
-static void emit_sub(const char *dest, const char *src1, const char* src2, std::ostream& s)
-{ s << SUB << dest << " " << src1 << " " << src2 << std::endl; }
 
-static void emit_sll(const char *dest, const char *src1, int num, std::ostream& s)
-{ s << SLL << dest << " " << src1 << " " << num << std::endl; }
 
-static void emit_jalr(const char *dest, std::ostream& s)
-{ s << JALR << "\t" << dest << std::endl; }
+static bool compatible_SUB(const Value& src) {
+	if (src.kind() == Value::Kind::NONE)
+		return false;
+	if (src.kind() == Value::Kind::MEM) {
+		const MemoryLocation& loc = ((const MemoryValue&) src).loc();
+		if (loc.kind() == MemoryLocation::Kind::NONE)
+			return false;
+		else if (loc.kind() == MemoryLocation::Kind::PTR_OFF)
+			return ((const RegisterPointerOffset&) loc).reg() == rIX;
+		else
+			return true;
+	}
+	return src.size() == 1;
+}
 
-static void emit_jr(const char *dest, std::ostream& s)
-{ s << JR << dest << std::endl; }
+static void emit_sub(const Value& src, std::ostream& s) {
+	assert (compatible_SUB(src));
+	s << SUB << src << std::endl;
+}
 
-static void emit_return(std::ostream& s)
-{ s << RET << std::endl; }
 
-static void emit_copy(std::ostream& s)
-{ s << JAL << "Object.copy" << std::endl; }
+static void emit_inc(const Register& dst, std::ostream& s) {
+	s << INC << dst << std::endl;
+}
 
-static void emit_gc_assign(std::ostream& s)
-{ s << JAL << "_GenGC_Assign" << std::endl; }
+static void emit_dec(const Register& dst, std::ostream& s) {
+	s << DEC << dst << std::endl;
+}
 
-static void emit_equality_test(std::ostream& s)
-{ s << JAL << "equality_test" << std::endl; }
 
-static void emit_case_abort(std::ostream& s)
-{ s << JAL << "_case_abort" << std::endl; }
+static void emit_sla(const Register8& dst, std::ostream& s) {
+	s << SLA << dst << std::endl;
+}
 
-static void emit_case_abort2(std::ostream& s)
-{ s << JAL << "_case_abort2" << std::endl; }
 
-static void emit_dispatch_abort(std::ostream& s)
-{ s << JAL << "_dispatch_abort" << std::endl; }
+static void emit_sra(const Register8& dst, std::ostream& s) {
+	s << SRA << dst << std::endl;
+}
+
+
+static void emit_srl(const Register8& dst, std::ostream& s) {
+	s << SRL << dst << std::endl;
+}
+
+
+static void emit_jr(const AbsoluteAddress& loc, Flag flag, std::ostream& s) {
+	s << JR;
+	if (flag)
+		s << flag << ",";
+	s << loc << std::endl;
+}
+static void emit_jr(int label_number, Flag flag, std::ostream& s) {
+	const AbsoluteAddress label_addr(std::string("label") + std::to_string(label_number));
+	emit_jr(label_addr, flag, s);
+}
+
+
+static bool compatible_JP(const MemoryLocation& dst) {
+	switch (dst.kind()) {
+	case MemoryLocation::PTR:
+		return ((const RegisterPointer&) dst).reg() == rHL;
+	case MemoryLocation::ABS:
+		return true;
+	case MemoryLocation::NONE:
+		return false;
+	case MemoryLocation::PTR_OFF:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static void emit_jp(const MemoryLocation& loc, Flag flag, std::ostream& s) {
+	assert (compatible_JP(loc));
+	s << JP;
+	if (flag)
+		s << flag << ",";
+	if (loc.kind() == MemoryLocation::Kind::PTR)
+		s << "(" << loc << ")" << std::endl;
+	else
+		s << loc << std::endl;
+}
+static void emit_jp(int label, Flag flag, std::ostream& s) {
+	char label_str[100];
+	sprintf(label_str, "label%d", label);
+	AbsoluteAddress loc(label_str);
+	emit_jp(loc, flag, s);
+}
+
+
+static void emit_return(Flag flag, std::ostream& s) {
+	s << RET;
+	if (flag)
+		s << flag;
+	s << std::endl;
+}
+
+
+static void emit_call(const AbsoluteAddress& addr, Flag flag, std::ostream& s) {
+	s << CALL;
+	if (flag)
+		s << flag << ",";
+	s << addr << std::endl;
+}
+
+
+static void emit_copy(std::ostream& s) {
+	AbsoluteAddress addr("Object.copy");
+	emit_call(addr, NULL, s);
+}
+
+static void emit_gc_assign(std::ostream& s) {
+	AbsoluteAddress addr("_GenGC_Assign");
+	emit_call(addr, NULL, s);
+}
+
+static void emit_equality_test(std::ostream& s) {
+	AbsoluteAddress addr("equality_test");
+	emit_call(addr, NULL, s);
+}
+
+static void emit_case_abort(std::ostream& s) {
+	AbsoluteAddress addr("_case_abort");
+	emit_call(addr, NULL, s);
+}
+
+static void emit_case_abort2(std::ostream& s) {
+	AbsoluteAddress addr("_case_abort2");
+	emit_call(addr, NULL, s);
+}
+
+static void emit_dispatch_abort(std::ostream& s) {
+	AbsoluteAddress addr("_dispatch_abort");
+	emit_call(addr, NULL, s);
+}
+
+
+static std::string label_ref(int l) {
+	char tmp[100];
+	sprintf(tmp, "label%d", l);
+	return std::string(tmp);
+}
 
 static void emit_label_ref(int l, std::ostream &s)
 { s << "label" << l; }
@@ -169,107 +435,196 @@ static void emit_label_def(int l, std::ostream &s)
   s << ":" << std::endl;
 }
 
-static void emit_beqz(const char *source, int label, std::ostream &s)
-{
-  s << BEQZ << source << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_beq(const char *src1, const char* src2, int label, std::ostream &s)
-{
-  s << BEQ << src1 << " " << src2 << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_bne(const char *src1, const char* src2, int label, std::ostream &s)
-{
-  s << BNE << src1 << " " << src2 << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_bleq(const char *src1, const char* src2, int label, std::ostream &s)
-{
-  s << BLEQ << src1 << " " << src2 << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_blt(const char *src1, const char* src2, int label, std::ostream &s)
-{
-  s << BLT << src1 << " " << src2 << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_bltz(const char *src1, int label, std::ostream &s)
-{
-  s << BLTZ << src1 << " ";
-  emit_label_ref(label, s);
-  s << std::endl;
-}
-
-static void emit_blti(const char *src1, int imm, int label, std::ostream &s)
-{
-  s << BLT << src1 << " " << imm << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_bgti(const char *src1, int imm, int label, std::ostream &s)
-{
-  s << BGT << src1 << " " << imm << " ";
-  emit_label_ref(label,s);
-  s << std::endl;
-}
-
-static void emit_branch(int l, std::ostream& s)
-{
-  s << BRANCH;
-  emit_label_ref(l,s);
-  s << std::endl;
-}
-
 // Push a register on the stack. The stack grows towards smaller addresses.
 //
-static void emit_push(const char *reg, std::ostream& str)
-{
-  emit_store(reg,0,SP,str);
-  emit_addiu(SP,SP,-4,str);
+static bool compatible_PUSH(const Register& src) {
+	return src.size() == 2;
+}
+static void emit_push(const Register& src, std::ostream& s) {
+	assert (compatible_PUSH(src));
+	s << PUSH << src << std::endl;
 }
 
-// Pop word from stack into register
-static void emit_pop(const char*dest_reg, std::ostream& str) {
-  emit_addiu(SP,SP,4,str);
-  emit_load(dest_reg, 0, SP, str);
+static bool compatible_POP(const Register& dst) {
+	return dst.size() == 2;
 }
+// Pop word from stack into register
+static void emit_pop(const Register& dst, std::ostream& s) {
+  s << POP << dst << std::endl;
+}
+
+
+static void emit_cp(const Register8& src, std::ostream& s) {
+  s << CP << src << std::endl;
+}
+static void emit_cp(const RegisterPointer& src, std::ostream& s) {
+  assert (src.reg() == rHL);
+  s << CP << MemoryValue(src) << std::endl;
+}
+
+static void emit_or(const Register8& src, std::ostream& s) {
+  s << OR << src << std::endl;
+}
+static void emit_or(const RegisterPointer& src, std::ostream& s) {
+  assert (src.reg() == rHL);
+  s << OR << src << std::endl;
+}
+
+
+///////////
+
 
 // Fetch the integer value in an Int object.
 //
-static void emit_fetch_int(const char *dest, const char *source, std::ostream& s)
-{ emit_load(dest, DEFAULT_OBJFIELDS, source, s); }
+static void emit_fetch_int(const RegisterValue& dst, const MemoryValue& src, std::ostream& s) {
+	assert (src.size() == 2 || src.size() == 0);
+	assert (dst.size() == 2);
+	if (src.loc().kind() == MemoryLocation::Kind::NONE) {
+		assert (src.loc().kind() != MemoryLocation::Kind::NONE);
+	} else if (src.loc().kind() == MemoryLocation::Kind::ABS) {
+		// can load in one LD instruction
+		const AbsoluteAddress& addr = (const AbsoluteAddress&) src.loc();
+		emit_load(dst, addr[DEFAULT_OBJFIELDS], s);
+	} else if (src.loc().kind() == MemoryLocation::Kind::PTR) {
+		// can load in two 1-byte LD instructions
+		assert (*dst.reg() != ((const RegisterPointer&) src.loc()).reg()); // make sure not loading to same register
+		
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_inc(*src.reg(), s);
+		}
+		
+		const Register16& dst_reg = (const Register16&) *dst.reg();
+		emit_load(dst_reg.low(), src, s);
+		emit_inc(*src.reg(), s);
+		emit_load(dst_reg.high(), src, s);
+		
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE + 1; ++i) {
+			emit_dec(*src.reg(), s);
+		}
+	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
+		const RegisterPointerOffset& src_loc = (const RegisterPointerOffset&) src.loc();
+		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS+1 < 128);
+		assert (dst.reg() && *dst.reg() != ((const RegisterPointerOffset&) src.loc()).reg());
+		const Register16& dst_reg = (const Register16&) *dst.reg();
+		emit_load(dst_reg.low(), src_loc[DEFAULT_OBJFIELDS], s);
+		emit_load(dst_reg.high(), src_loc[DEFAULT_OBJFIELDS+1], s);
+	} else {
+		assert (false);
+	}
+}
 
 // Update the integer value in an int object.
 //
-static void emit_store_int(const char *source, const char *dest, std::ostream& s)
-{ emit_store(source, DEFAULT_OBJFIELDS, dest, s); }
+static void emit_store_int(const RegisterValue& src, const MemoryValue& dst, std::ostream& s) {
+	assert (src.size() == 2);
+	assert (dst.size() == 2 || dst.size() == 0);
+	
+	if (dst.loc().kind() == MemoryLocation::Kind::NONE) {
+		assert (false);
+	} else if (dst.loc().kind() == MemoryLocation::Kind::ABS) {
+		// load 2 bytes in one instr.
+		const AbsoluteAddress& addr = (const AbsoluteAddress&) dst.loc();
+		emit_load(addr[DEFAULT_OBJFIELDS], src, s);
+	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR) {
+		// use 2 load instructions
+		assert (*src.reg() != ((const RegisterPointer&) dst.loc()).reg());
+		
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_inc(*dst.reg(), s);
+		}
+		
+		const Register16& src_reg = (const Register16&) *src.reg();
+		
+		emit_load(dst, src_reg.low(), s);
+		emit_inc(*dst.reg(), s);
+		emit_load(dst, src_reg.high(), s);
+		
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE + 1; ++i) {
+			emit_dec(*dst.reg(), s);
+		}
+	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
+		const RegisterPointerOffset& ptr_off = (const RegisterPointerOffset&) dst.loc();
+		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS+1 < 128);
+		assert (*src.reg() != ((const RegisterPointer&) dst.loc()).reg());
+		const Register16& src_reg = (const Register16&) *src.reg();
+		emit_load(ptr_off[DEFAULT_OBJFIELDS], src_reg.low(), s);
+		emit_load(ptr_off[DEFAULT_OBJFIELDS+1], src_reg.high(), s);
+	} else {
+		assert (false);
+	}
+}
 
 // Fetch the bool value in a Bool object.
-static void emit_fetch_bool(const char* dest, const char* src, std::ostream& s)
-{ emit_load(dest, DEFAULT_OBJFIELDS, src, s); }
+static void emit_fetch_bool(const RegisterValue& dst, const MemoryValue& src, std::ostream& s) {
+	assert (dst.size() == 2);
+	assert (src.size() == 2 || src.size() == 0);
+	if (src.loc().kind() == MemoryLocation::Kind::NONE) {
+		assert (false);
+	} else if (src.loc().kind() == MemoryLocation::Kind::ABS) {
+		const AbsoluteAddress& src_addr = (const AbsoluteAddress&) src.loc();
+		emit_load(dst, src_addr[DEFAULT_OBJFIELDS], s);
+	} else if (src.loc().kind() == MemoryLocation::Kind::PTR) {
+		const RegisterPointer& src_loc = (const RegisterPointer&) src.loc();
+		assert (*dst.reg() != src_loc.reg().high() && *dst.reg() != src_loc.reg().low());
+// 		emit_add(src, DEFAULT_OBJFIELDS, s);
+
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_inc(*src.reg(), s);
+		}
+
+		emit_load(dst, src, s);
+// 		emit_add(src, -DEFAULT_OBJFIELDS, s);
+
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_dec(*dst.reg(), s);
+		}		
+	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
+		const RegisterPointerOffset& src_loc = (const RegisterPointerOffset&) src.loc();
+		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS < 128);
+		assert (*dst.reg() != src_loc.reg().high() && *dst.reg() != src_loc.reg().low());
+		emit_load(dst, src_loc[DEFAULT_OBJFIELDS], s);
+	} else {
+		assert (false);
+	}
+}
 
 // Update the bool value in a Bool object.
-static void emit_store_bool(const char* src, const char* dest, std::ostream& s)
-{ emit_store(src, DEFAULT_OBJFIELDS, dest, s); }
-
-
-static void emit_gc_check(const char *source, std::ostream &s)
-{
-  if (source != A1) emit_move(A1, source, s);
-  s << JAL << "_gc_check" << std::endl;
+static void emit_store_bool(const RegisterValue& src, const MemoryValue& dst, std::ostream& s) {
+	assert (src.size() == 1);
+	assert (dst.size() == 2 || dst.size() == 0);
+	if (dst.loc().kind() == MemoryLocation::Kind::NONE) {
+		assert (false);
+	} else if (dst.loc().kind() == MemoryLocation::Kind::ABS) {
+		emit_load(dst[DEFAULT_OBJFIELDS], src, s);
+	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR) {
+		const RegisterPointer& dst_loc = (const RegisterPointer&) dst.loc();
+		assert (*src.reg() != dst_loc.reg().high() && *src.reg() != dst_loc.reg().low());
+		
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_inc(*dst.reg(), s);
+		}
+		
+		emit_load(dst, src, s);
+		
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_dec(*dst.reg(), s);
+		}
+	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
+		const RegisterPointer& dst_loc = (const RegisterPointer&) dst.loc();
+		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS < 128);
+		assert (src.reg() && *src.reg() != dst_loc.reg().high() && *src.reg() != dst_loc.reg().low());
+		emit_load(dst[DEFAULT_OBJFIELDS], src, s);
+	} else {
+		assert (false);
+	}
 }
+
+//  currently not used	
+// static void emit_gc_check(const char *source, std::ostream &s)
+// {
+//   if (source != A1) emit_move(A1, source, s);
+//   s << JAL << "_gc_check" << std::endl;
+// }
 
 namespace cool {
 
@@ -317,8 +672,9 @@ void emit_method_ref(Symbol* classname, Symbol* methodname, std::ostream& os) {
 }
 
 void emit_init_ref(Symbol* sym, std::ostream& os) { os << sym << CLASSINIT_SUFFIX; }
+std::string get_init_ref(Symbol* sym) { return std::string(sym->value()) + std::string(CLASSINIT_SUFFIX); }
 void emit_init(Symbol* classname, std::ostream& os) {
-  os << JAL; emit_init_ref(classname, os); os << std::endl;
+  os << CALL; emit_init_ref(classname, os); os << std::endl;
 }
 
 /**
@@ -327,9 +683,15 @@ void emit_init(Symbol* classname, std::ostream& os) {
  * @param entry String constant
  * @return os
  */
+const int CgenRef_strlen = 100;
 std::ostream& CgenRef(std::ostream& os, const StringEntry* entry) {
   os << STRCONST_PREFIX << entry->id();
   return os;
+}
+std::string CgenRef(const StringEntry* entry) {
+	char s[CgenRef_strlen];
+	sprintf(s, "%s%lu", STRCONST_PREFIX, entry->id());
+	return std::string(s);
 }
 
 /**
@@ -338,9 +700,14 @@ std::ostream& CgenRef(std::ostream& os, const StringEntry* entry) {
  * @param entry Int constant
  * @return os
  */
-std::ostream& CgenRef(std::ostream& os, const Int32Entry* entry) {
+std::ostream& CgenRef(std::ostream& os, const Int16Entry* entry) {
   os << INTCONST_PREFIX << entry->id();
   return os;
+}
+std::string CgenRef(const Int16Entry* entry) {
+	char s[CgenRef_strlen];
+	sprintf(s, "%s%lu", INTCONST_PREFIX, entry->id());
+	return std::string(s);
 }
 
 /**
@@ -352,6 +719,11 @@ std::ostream& CgenRef(std::ostream& os, const Int32Entry* entry) {
 std::ostream& CgenRef(std::ostream& os, bool entry) {
   os << BOOLCONST_PREFIX  << ((entry) ? 1 : 0);
   return os;
+}
+std::string CgenRef(bool entry) {
+	char s[CgenRef_strlen];
+	sprintf(s, "%s%d", BOOLCONST_PREFIX, (entry) ? 1 : 0);
+	return std::string(s);
 }
 
 
@@ -367,14 +739,13 @@ std::ostream& CgenDef(std::ostream& os, const StringEntry* entry, std::size_t cl
   auto length_entry = gIntTable.emplace(value.size());
   
   // Add -1 eye catcher
-  os << WORD << "-1" << std::endl;
+  os << DW << "-1" << std::endl;
   CgenRef(os, entry) << LABEL;
-  os << WORD << class_tag << std::endl
-     << WORD << (DEFAULT_OBJFIELDS + STRING_SLOTS + (value.size() + 4)/4) << std::endl // size
-     << WORD; emit_disptable_ref(String, os); os << std::endl;
-  os << WORD; CgenRef(os, length_entry) << std::endl;
+  os << DW << class_tag << std::endl
+     << DW << (DEFAULT_OBJFIELDS + STRING_SLOTS + (value.size() + WORD_SIZE)/WORD_SIZE) << std::endl // size
+     << DW; emit_disptable_ref(String, os); os << std::endl;
+  os << DW; CgenRef(os, length_entry) << std::endl;
   emit_string_constant(os, value.c_str());
-  os << ALIGN;
   return os;
 }
 
@@ -385,14 +756,14 @@ std::ostream& CgenDef(std::ostream& os, const StringEntry* entry, std::size_t cl
  * @param class_tag Int class tag
  * @return os
  */
-std::ostream& CgenDef(std::ostream& os, const Int32Entry* entry, std::size_t class_tag) {
+std::ostream& CgenDef(std::ostream& os, const Int16Entry* entry, std::size_t class_tag) {
   // Add -1 eye catcher
-  os << WORD << "-1" << std::endl;
+  os << DW << "-1" << std::endl;
   CgenRef(os, entry) << LABEL;
-  os << WORD << class_tag << std::endl
-     << WORD << (DEFAULT_OBJFIELDS + INT_SLOTS) << std::endl
-     << WORD; emit_disptable_ref(Int, os); os << std::endl;
-  os << WORD << entry->value() << std::endl;
+  os << DW << class_tag << std::endl
+     << DW << (DEFAULT_OBJFIELDS + INT_SLOTS) << std::endl
+     << DW; emit_disptable_ref(Int, os); os << std::endl;
+  os << DW << entry->value() << std::endl;
   return os;
 }
 
@@ -405,12 +776,12 @@ std::ostream& CgenDef(std::ostream& os, const Int32Entry* entry, std::size_t cla
  */
 std::ostream& CgenDef(std::ostream& os, bool entry, std::size_t class_tag) {
   // Add -1 eye catcher
-  os << WORD << "-1" << std::endl;
+  os << DW << "-1" << std::endl;
   CgenRef(os, entry) << LABEL;
-  os << WORD << class_tag << std::endl
-     << WORD << (DEFAULT_OBJFIELDS + BOOL_SLOTS) << std::endl
-     << WORD; emit_disptable_ref(Bool, os); os << std::endl;
-  os << WORD << ((entry) ? 1 : 0) << std::endl;
+  os << DW << class_tag << std::endl
+     << DW << (DEFAULT_OBJFIELDS + BOOL_SLOTS) << std::endl
+     << DW; emit_disptable_ref(Bool, os); os << std::endl;
+  os << DW << ((entry) ? 1 : 0) << std::endl;
   return os;
 }
 
@@ -442,31 +813,6 @@ std::ostream& CgenDef(std::ostream& os, const SymbolTable<Elem>& table, size_t c
 
 
 
-
-/* MemoryLocation implementation */
-void IndirectLocation::emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {
-  emit_addiu(dest_reg, base_reg(), WORD_SIZE*offset(), s);
-}
-void IndirectLocation::emit_load_from_loc(const char* dest_reg, std::ostream& s) {
-  emit_load(dest_reg, offset(), base_reg(), s);
-}
-void IndirectLocation::emit_store_to_loc(const char* src_reg, std::ostream& s) {
-  emit_store(src_reg, offset(), base_reg(), s);
-}
-
-void AbsoluteLocation::emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {
-  emit_partial_load_address(dest_reg, s);
-  s << label_ << "+" << WORD_SIZE*offset() << std::endl;
-}
-void AbsoluteLocation::emit_load_from_loc(const char* dest_reg, std::ostream& s) {
-  s << LW << dest_reg << " " << label() << "+" << offset() << std::endl;
-}
-void AbsoluteLocation::emit_store_to_loc(const char* src_reg, std::ostream& s) {
-  s << SW << src_reg << " " << label() << "+" << WORD_SIZE*offset() << std::endl;
-}
-
-
-
 // CreateAttrVarEnv
 //  -adds attributes to the variable environment (mapping from symbols to mem locations)
 void CgenNode::CreateAttrVarEnv(int next_offset) {
@@ -478,10 +824,11 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
   for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
   	if ((*feature)->attr()) {
   	  Attr* attr = (Attr*) (*feature);
-  	  MemoryLocation* offset = new IndirectLocation(next_offset, SELF);
-  	  attrVarEnv_.Push(attr->name(), offset);  	  
-  	  ++next_offset;
-  	  ++objectSize_;	// update object size
+//   	  MemoryLocation* offset = new IndirectLocation(next_offset, SELF);
+		RegisterPointerOffset loc(SELF, next_offset);
+  	  attrVarEnv_.Push(attr->name(), loc);  	  
+  	  next_offset += WORD_SIZE; // pointers are 2 bytes
+  	  objectSize_ += WORD_SIZE;	// update object size
   	}
   }
   
@@ -493,8 +840,13 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
 //  -creates a table of dispatch tables (one per class)
 //   with each table mapping a method name to a memory location
 void CgenNode::CreateDispatchTables(DispatchTables& tables, int next_offset) {
-  if (parent() != nullptr)
-     { tables[klass()->name()] = tables[parent()->name()]; }
+  if (parent() != nullptr) {
+  	Symbol *name = klass()->name();
+  	tables[name] = tables[parent()->name()];
+  	for (auto p : tables[name]) {
+  		p.second->label_ = std::string(name->value()) + std::string(DISPTAB_SUFFIX);
+  	}
+  }
   
   for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
   	if ((*feature)->method()) {
@@ -503,9 +855,12 @@ void CgenNode::CreateDispatchTables(DispatchTables& tables, int next_offset) {
   	    std::string dispTab_label = klass()->name()->value();
   	    dispTab_label.append(DISPTAB_SUFFIX);
   	    
-  	    MemoryLocation* offset = new AbsoluteLocation(next_offset, dispTab_label);
+  	    
+  	    
+  	    AbsoluteAddress *offset = new AbsoluteAddress(dispTab_label, next_offset);
+//   	    MemoryLocation* offset = new AbsoluteLocation(next_offset, dispTab_label);
   	    tables[klass()->name()].emplace(method->name(), offset);
-  	    ++next_offset;
+  	    next_offset += WORD_SIZE;
   	  }
   	}
   }
@@ -535,49 +890,48 @@ CgenKlassTable::CgenKlassTable(Klasses* klasses) {
   }
   
   // generate class variable environments, starting recursively from root (Object)
-  root()->CreateAttrVarEnv(CgenObjectLayout_AttributeOffset);
+  root()->CreateAttrVarEnv(CgenLayout::Object::attribute_offset);
   // recursively generate dispatch tables, starting from empty table
   root()->CreateDispatchTables(gCgenDispatchTables, 0);
 }
 
 
 
+// 	TO BE CHANGED
 void CgenKlassTable::CgenGlobalData(std::ostream& os) const {
   Symbol* main    = gIdentTable.emplace(MAINNAME);
   Symbol* string  = gIdentTable.emplace(STRINGNAME);
   Symbol* integer = gIdentTable.emplace(INTNAME);
   Symbol* boolc   = gIdentTable.emplace(BOOLNAME);
 
-  os << "\t.data\n" << ALIGN;
-
   // The following global names must be defined first.
-  os << GLOBAL << CLASSNAMETAB << std::endl;
-  os << GLOBAL; emit_protobj_ref(main, os);    os << std::endl;
-  os << GLOBAL; emit_protobj_ref(integer, os); os << std::endl;
-  os << GLOBAL; emit_protobj_ref(string, os);  os << std::endl;
-  os << GLOBAL << BOOLCONST_PREFIX << 0 << std::endl;
-  os << GLOBAL << BOOLCONST_PREFIX << 1 << std::endl;
-  os << GLOBAL << INTTAG << std::endl;
-  os << GLOBAL << BOOLTAG << std::endl;
-  os << GLOBAL << STRINGTAG << std::endl;
+//   os << GLOBAL << CLASSNAMETAB << std::endl;
+//   os << GLOBAL; emit_protobj_ref(main, os);    os << std::endl;
+//   os << GLOBAL; emit_protobj_ref(integer, os); os << std::endl;
+//   os << GLOBAL; emit_protobj_ref(string, os);  os << std::endl;
+//   os << GLOBAL << BOOLCONST_PREFIX << 0 << std::endl;
+//   os << GLOBAL << BOOLCONST_PREFIX << 1 << std::endl;
+//   os << GLOBAL << INTTAG << std::endl;
+//   os << GLOBAL << BOOLTAG << std::endl;
+//   os << GLOBAL << STRINGTAG << std::endl;
 
   // We also need to know the tag of the Int, String, and Bool classes
   // during code generation.
-  os << INTTAG << LABEL << WORD << TagFind(integer) << std::endl;
-  os << BOOLTAG << LABEL << WORD << TagFind(boolc) << std::endl;
-  os << STRINGTAG << LABEL << WORD <<  TagFind(string) << std::endl;
+  os << INTTAG << LABEL << DW << TagFind(integer) << std::endl;
+  os << BOOLTAG << LABEL << DW << TagFind(boolc) << std::endl;
+  os << STRINGTAG << LABEL << DW <<  TagFind(string) << std::endl;
 }
 
 void CgenKlassTable::CgenSelectGC(std::ostream& os) const {
-  os << GLOBAL << "_MemMgr_INITIALIZER" << std::endl;
+//   os << GLOBAL << "_MemMgr_INITIALIZER" << std::endl;
   os << "_MemMgr_INITIALIZER:" << std::endl;
-  os << WORD << gc_init_names[cgen_Memmgr] << std::endl;
-  os << GLOBAL << "_MemMgr_COLLECTOR" << std::endl;
+  os << DW << gc_init_names[cgen_Memmgr] << std::endl;
+//   os << GLOBAL << "_MemMgr_COLLECTOR" << std::endl;
   os << "_MemMgr_COLLECTOR:" << std::endl;
-  os << WORD << gc_collect_names[cgen_Memmgr] << std::endl;
-  os << GLOBAL << "_MemMgr_TEST" << std::endl;
+  os << DW << gc_collect_names[cgen_Memmgr] << std::endl;
+//   os << GLOBAL << "_MemMgr_TEST" << std::endl;
   os << "_MemMgr_TEST:" << std::endl;
-  os << WORD << (cgen_Memmgr_Test == GC_TEST) << std::endl;
+  os << DW << (cgen_Memmgr_Test == GC_TEST) << std::endl;
 }
 
 void CgenKlassTable::CgenConstants(std::ostream& os) const {
@@ -594,24 +948,24 @@ void CgenKlassTable::CgenConstants(std::ostream& os) const {
 
 
 void CgenKlassTable::CgenGlobalText(std::ostream& os) const {
-  os << GLOBAL << HEAP_START << std::endl
-      << HEAP_START << LABEL
-      << WORD << 0 << std::endl
-      << "\t.text" << std::endl
-      << GLOBAL;
-  emit_init_ref(Main, os);
-  os << std::endl << GLOBAL;
-  emit_init_ref(Int, os);
-  os << std::endl << GLOBAL;
-  emit_init_ref(String, os);
-  os << std::endl << GLOBAL;
-  emit_init_ref(Bool, os);
-  os << std::endl << GLOBAL;
-  emit_method_ref(Main, main_meth, os);
-  os << std::endl;
+//   os << GLOBAL << HEAP_START << std::endl
+//       os << HEAP_START << LABEL
+//       << WORD << 0 << std::endl
+//       << "\t.text" << std::endl
+//       << GLOBAL;
+//   emit_init_ref(Main, os);
+//   os << std::endl << GLOBAL;
+//   emit_init_ref(Int, os);
+//   os << std::endl << GLOBAL;
+//   emit_init_ref(String, os);
+//   os << std::endl << GLOBAL;
+//   emit_init_ref(Bool, os);
+//   os << std::endl << GLOBAL;
+//   emit_method_ref(Main, main_meth, os);
+//   os << std::endl;
 }
 
-
+// modified 8/2018
 void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t) {
   // add overridden methods to method inheritance table
   for (auto features_it = klass()->features_begin(); features_it != klass()->features_end(); features_it++) {
@@ -623,13 +977,22 @@ void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, Metho
   }
 
   DispatchTable& table = tables[klass()->name()];
-  std::vector<Symbol*> ordered_table(table.size());
-  for (std::pair<Symbol*,MemoryLocation*> p : table)
-    {  ordered_table[p.second->offset()] = p.first; }
+  
+  std::vector<std::pair<Symbol*,AbsoluteAddress*>> ordered_table;
+  for (std::pair<Symbol*,AbsoluteAddress*> p : table)
+    {  ordered_table.push_back(p); }
+
+	// sort table
+	std::sort(ordered_table.begin(), ordered_table.end(), [](const auto lhs, const auto rhs){
+		assert (lhs.second && rhs.second);
+		return *lhs.second < *rhs.second;
+	});
 
   os << klass()->name() << DISPTAB_SUFFIX << LABEL;
-  for (Symbol* method_name : ordered_table)
-    { os << WORD << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl; }
+  for (auto method_pair : ordered_table) {
+  	Symbol* method_name = method_pair.first;
+  	os << DW << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl;
+  }
 
   for (CgenNode* child : children_)
     { child->EmitDispatchTable(os, tables, inheritance_t); }
@@ -641,27 +1004,28 @@ void CgenKlassTable::CgenDispatchTables(std::ostream& os) const {
   root()->EmitDispatchTable(os, gCgenDispatchTables, inheritance_t);
 }
 
+// modified 8/18
 void CgenNode::EmitPrototypeObject(std::ostream& os) {
   // handle Int, String, Bool separately
-  os << WORD << "-1" << std::endl;	// GC tag
+  os << DW << "-1" << std::endl;	// GC tag
   os << klass()->name() << PROTOBJ_SUFFIX << LABEL; // label
-  os << WORD << tag_ << std::endl; // tag
+  os << DW << tag_ << std::endl; // tag
   if (klass()->name() == String) {
-    os << WORD << 5 << std::endl;
-    os << WORD << klass()->name() << DISPTAB_SUFFIX << std::endl;
-    os << WORD;
+    os << DW << 5 << std::endl;
+    os << DW << klass()->name() << DISPTAB_SUFFIX << std::endl;
+    os << DW;
     CgenRef(os, gIntTable.lookup(0)) << std::endl;
-    os << WORD << 0 << std::endl;
+    os << DW << 0 << std::endl;
   } else if (klass()->name() == Int || klass()->name() == Bool) {
     // attributes end up being the same for Int & Bool
-    os << WORD << 4 << std::endl;
-    os << WORD << klass()->name() << DISPTAB_SUFFIX << std::endl;
-    os << WORD << 0 << std::endl;
+    os << DW << 4 << std::endl;
+    os << DW << klass()->name() << DISPTAB_SUFFIX << std::endl;
+    os << DW << 0 << std::endl;
   } else {
-    os << WORD << objectSize_ << std::endl;
-    os << WORD << klass()->name() << DISPTAB_SUFFIX << std::endl;
+    os << DW << objectSize_ << std::endl;
+    os << DW << klass()->name() << DISPTAB_SUFFIX << std::endl;
     for (int i = 0; i < attrVarEnv_.vars_.size(); ++i)
-    	{ os << WORD << 0 << std::endl; }
+    	{ os << DW << 0 << std::endl; }
   }
   
   for (CgenNode* child : children_)
@@ -686,14 +1050,14 @@ void CgenKlassTable::CgenClassNameTab(std::ostream& os) const {
     CgenDef(os, class_name, TagFind(String));
     if (!had_length_entry) {
       // int constant for str len needs to be generated
-      Int32Entry* length_entry = gIntTable.lookup(class_name->value().size());
+      Int16Entry* length_entry = gIntTable.lookup(class_name->value().size());
       CgenDef(os, length_entry, TagFind(Int));
     }
   }
   
   os << CLASSNAMETAB << LABEL;
   for (std::pair<std::size_t,Symbol*> p : ordered_class_names) {
-    os << WORD;
+    os << DW;
     Symbol* class_name = gStringTable.lookup(p.second->value());
     CgenRef(os, class_name);
     os << std::endl;
@@ -709,8 +1073,8 @@ void CgenKlassTable::CgenClassObjTab(std::ostream& os) const {
   
   os << CLASSOBJTAB << LABEL;
   for (std::pair<int,Symbol*> p : ordered_class_names) {
-    os << WORD << p.second << PROTOBJ_SUFFIX << std::endl;
-    os << WORD << p.second << CLASSINIT_SUFFIX << std::endl;
+    os << DW << p.second << PROTOBJ_SUFFIX << std::endl;
+    os << DW << p.second << CLASSINIT_SUFFIX << std::endl;
   }
 }
 
@@ -718,7 +1082,7 @@ void CgenKlassTable::CgenClassObjTab(std::ostream& os) const {
 // EmitInitializer: emit initializer for class
 void CgenNode::EmitInitializer(std::ostream& os) {
   attrVarEnv_.klass_ = klass(); // set current class
-  attrVarEnv_.ResetTemporaryCount(); // so temporaries will be assigned to proper locs
+  attrVarEnv_.ResetTemporaryCount(); // so temporaries will be assigned to proper loc
   os << klass()->name() << CLASSINIT_SUFFIX << LABEL;
 
   if (klass()->name() == Object) {
@@ -727,10 +1091,15 @@ void CgenNode::EmitInitializer(std::ostream& os) {
     Symbol* parent_name = parent()->klass()->name();
     
     // set up activation record
-    emit_addiu(SP, SP, -WORD_SIZE*CgenARLayout_BaseSize, os);
-    emit_store(FP, CgenARLayout_FPOffset+1, SP, os);
-    emit_store(SELF, CgenARLayout_SelfPOffset+1, SP, os);
-    emit_addiu(FP, SP, WORD_SIZE*1, os); // set FP to caller's saved RA
+    emit_push(FP, os);
+  	emit_push(SELF, os);
+  	emit_load(RegisterValue(FP), Immediate16((int16_t) 0), os);
+  	emit_add(FP, RegisterValue(SP), os);	// FP = new frame pointer value
+
+  	// emit_load(SELF, ARG0, os); // bind self
+    os << EX << rDE << "," << rHL << std::endl;
+  emit_load(SELF, rDE, os); // bind self, but can only do it with DE -> IX
+    
     
     // find maximum number of temporaries needed over all attributes
     int max_temps = 0;
@@ -740,17 +1109,23 @@ void CgenNode::EmitInitializer(std::ostream& os) {
         max_temps = std::max(max_temps, attr->init()->CalcTemps());
       }
     }
-    emit_addiu(SP, SP, -max_temps*WORD_SIZE, os); // reserve space for temps
-    
+    assert (max_temps*WORD_SIZE == (int8_t) (max_temps*WORD_SIZE));	// if this fails, then codegen will fail -- need workaround
+    // max_temps ≤ 63 because IY register can be offset using a signed 8-bit int, which allows for a range of -128≤x≤127 bytes
+    emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(-max_temps*WORD_SIZE)), os);
+    emit_add(rHL, RegisterValue(SP), os);
+	emit_load(RegisterValue(SP), RegisterValue(rHL), os);
+	// don't change IY, though
+	
     // call parent initializer
-    emit_push(RA, os);
-    os << JAL;
-	emit_init_ref(parent_name, os);
-	os << std::endl;
-	emit_pop(RA, os);
+//     emit_load(ARG0, SELF, os);
+  	emit_load(rDE, SELF, os); // bind self, but can only do it with DE -> IX    
+	os << EX << rDE << "," << rHL << std::endl;
+
+    AbsoluteAddress addr(get_init_ref(parent_name));
+    emit_call(addr, Flags::none, os);
 	
 	// set self for attribute initializers
-	emit_move(SELF, ACC, os);
+// 	emit_load(SELF, ARG0, os); // dont need to do this, actually
 	
 	// initialize attributes
 	for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
@@ -759,21 +1134,22 @@ void CgenNode::EmitInitializer(std::ostream& os) {
 	    Expression* init = attr->init();
 	    attrVarEnv_.init_type_ = attr->decl_type();    
 	    init->CodeGen(attrVarEnv_, os);	// result in ACC
-	    MemoryLocation* attr_offset = attrVarEnv_.Lookup(attr->name());	    
-	    attr_offset->emit_store_to_loc(ACC, os);
+	    MemoryLocation& attr_offset = attrVarEnv_.Lookup(attr->name());   
+		MemoryValue attr_val(attr_offset);
+		emit_load(attr_val, ARG0, os);
 	  }
 	}
 	
-	emit_move(ACC, SELF, os); // current object expected in ACC
-	
 	// cleanup
-	emit_load(SELF, CgenARLayout_SelfPOffset, FP, os);
-	emit_load(FP, CgenARLayout_FPOffset, FP, os);
-	emit_addiu(SP, SP, WORD_SIZE*(CgenARLayout_BaseSize+max_temps), os);
-	
+	emit_load(rDE, SELF, os); 
+	os << EX << rDE << "," << rHL << std::endl; // current object expected in ACC
+	emit_load(SP, FP, os);
+	emit_pop(SELF, os);
+	emit_pop(FP, os);
+		
 	attrVarEnv_.init_type_ = nullptr;
   }
-  emit_return(os);
+  emit_return(Flags::none, os); // return for both Object & other types
   
   for (CgenNode* child : children_) {
     child->EmitInitializer(os);
@@ -803,12 +1179,87 @@ void CgenNode::EmitMethods(std::ostream& os) {
   }
 }
 
+
+void CgenNode::EmitInheritanceInfo(std::ostream& os) const {
+	os << DW << tag_ << std::endl;
+	os << DW << (parent_->tag_ - tag_) * CgenLayout::InheritanceTree::entry_length << std::endl;
+}
+
+std::pair<bool,int> CgenKlassTable::InheritanceDistance(const CgenNode* child, const CgenNode* parent) const {
+	if (!(child && parent))
+		return std::pair<bool,int>(false, 0);
+	
+	int dist = 0;
+	const CgenNode* child_tmp = child;
+	while (child_tmp != root() && child_tmp != parent) {
+		child_tmp = child_tmp->parent();
+		++dist;
+	}
+	if (child_tmp == parent)
+		return std::pair<bool,int>(true, dist);
+	
+	// didn't find match, so consider case of 'parent' being child of 'child'
+	dist = 0;
+	const CgenNode* parent_tmp = parent;
+	while (parent_tmp != root() && parent_tmp != child) {
+		parent_tmp = parent_tmp->parent();
+		--dist;
+	}
+	if (parent_tmp == child)
+		return std::pair<bool,int>(true, dist);
+	
+	return std::pair<bool,int>(false, 0);
+}
+
+std::map<std::size_t, const CgenNode *> CgenKlassTable::GetTags() const {
+	std::map<std::size_t, const CgenNode *> tags;
+	std::deque<const CgenNode *> todo;
+	todo.push_front(root());
+	
+	while (!todo.empty()) {
+		const CgenNode *node = todo.back();
+		todo.pop_back();
+		tags[node->tag()] = node;
+		std::vector<CgenNode*> children = node->children_;
+		for (CgenNode *child : children)
+			todo.push_front(child);
+	}
+	
+	return tags;
+}
+
 // CgenClassMethods: emit methods for all classes
 void CgenKlassTable::CgenClassMethods(std::ostream& os) const {
   root()->EmitMethods(os);
 }
 
+void CgenZ80Routines(std::ostream& os) {
+	const std::vector<Routine *> routines = Routine::routines;
+	for (Routine *routine : routines) {
+		routine->def(os);
+	}
+}
+
+void CgenKlassTable::CgenInheritanceTree(std::ostream& os) const {
+	os << INHERITANCE_TREE << LABEL;
+
+	std::map<std::size_t, const CgenNode *> tags = GetTags();
+	for (std::pair<std::size_t, const CgenNode *> tag : tags) {
+		tag.second->EmitInheritanceInfo(os);
+	}
+		
+}
+
+void CgenHeader(std::ostream& os) {
+	os << "#include \"ti83plus.inc\"" << std::endl;
+	os << ".org $9D93" << std::endl;
+	os << ".db $BB,$6D ; AsmPrgm" << std::endl;
+	os << std::endl;
+}
+
 void CgenKlassTable::CodeGen(std::ostream& os) const {
+  CgenHeader(os);
+
   CgenGlobalData(os);
   CgenSelectGC(os);
   CgenConstants(os);
@@ -822,6 +1273,8 @@ void CgenKlassTable::CodeGen(std::ostream& os) const {
   
   CgenClassInits(os);
   CgenClassMethods(os);
+  
+  CgenZ80Routines(os);
 }
 
 
@@ -833,357 +1286,534 @@ void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   varEnv.ResetTemporaryCount();
   int temp_count = body_->CalcTemps();
   
-  // perform callee setup
-  emit_addiu(SP, SP, -WORD_SIZE*CgenARLayout_BaseSize, os);
+  // perform callee AR setup
+  emit_push(FP, os);
+  emit_push(SELF, os);
+  emit_load(RegisterValue(FP), Immediate16(static_cast<int16_t>(0)), os);
+  emit_add(FP, SP, os);	// FP = new frame pointer value
   
-  emit_store(FP, CgenARLayout_FPOffset+1, SP, os);
-  emit_store(SELF, CgenARLayout_SelfPOffset+1, SP, os);
-  emit_addiu(FP, SP, WORD_SIZE*1, os); // set FP to caller's saved RA
-  emit_addiu(SP, SP, -WORD_SIZE*temp_count, os);
-  
-  emit_move(SELF, ACC, os); // bind self
-    
-  int formals_counter = formals()->size() - 1 + CgenARLayout_BaseSize; // account for storage of caller's state
+  os << EX << rDE << "," << rHL << std::endl;
+  emit_load(SELF, rDE, os); // bind self, but can only do it with DE -> IX
+
+  int formals_counter = formals()->size();
   for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
     Formal* formal = *formals_it;
     // need to assign location relative to FP
-    MemoryLocation* formal_loc = new IndirectLocation(formals_counter, FP);
+//     MemoryLocation* formal_loc = new IndirectLocation(formals_counter, FP);
+	RegisterPointerOffset formal_loc(FP, (formals_counter + CgenLayout::ActivationRecord::arguments_end)*WORD_SIZE);
     varEnv.Push(formal->name(), formal_loc);
     --formals_counter;
   }
   
   body_->CodeGen(varEnv, os); // generate method body
-  int temporaryOffset = varEnv.GetTemporaryMaxCount() * WORD_SIZE;
-    
-  emit_load(SELF, CgenARLayout_SelfPOffset, FP, os);
-  emit_load(FP, CgenARLayout_FPOffset, FP, os);
+  int temporary_offset = varEnv.GetTemporaryMaxCount() * WORD_SIZE;
   
-  // pop entire AR off stack, including arguments from caller
-  emit_addiu(SP, SP, WORD_SIZE*CgenARLayout_BaseSize + temporaryOffset + WORD_SIZE*formals_->size(), os);
-  emit_return(os);
+  // pop entire AR off stack, NOT INCLUDING return addr. & arguments from caller
+  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>((temporary_offset - CgenLayout::ActivationRecord::callee_add_size)*WORD_SIZE)), os);
+  emit_add(rHL, RegisterValue(SP), os);
   
-  // delete MemoryLocation ptrs
+  emit_return(Flags::none, os);
+  
+  // exit method scope
   for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
     Formal* formal = *formals_it;
-    MemoryLocation* formal_loc = varEnv.Lookup(formal->name());
     varEnv.Pop(formal->name());
-    delete formal_loc;
   }
 }
 
 void BoolLiteral::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  emit_partial_load_address(ACC, os);
-  CgenRef(os, value()) << std::endl;
+	const char *addr = CgenRef(value()).c_str();
+	const LabelValue lbl(addr);
+	emit_load(RegisterValue(ARG0), lbl, os);
 }
 
 void IntLiteral::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  emit_partial_load_address(ACC, os);
-  CgenRef(os, value_) << std::endl;
+  emit_load(RegisterValue(ARG0), CgenRef(value_), os);
 }
 
 void StringLiteral::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  emit_partial_load_address(ACC, os);
-  CgenRef(os, value_) << std::endl;
+  emit_load(RegisterValue(ARG0), CgenRef(value_), os);
 }
 
 void NoExpr::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // need to know type of relevant variable
   Symbol* init_t = varEnv.init_type_;
   if (init_t == Int) {
-    emit_partial_load_address(ACC, os);
-    CgenRef(os, gIntTable.lookup(0)); os << std::endl;
+  	emit_load(RegisterValue(ARG0), CgenRef(gIntTable.lookup(0)), os);
   } else if (init_t == Bool) {
-    emit_partial_load_address(ACC, os);
-    CgenRef(os, false); os << std::endl;
+    emit_load(RegisterValue(ARG0), CgenRef(false), os);
   } else if (init_t == String) {
-    emit_partial_load_address(ACC, os);
-    CgenRef(os, gStringTable.lookup(std::string(""))); os << std::endl;
+    emit_load(RegisterValue(ARG0), CgenRef(gStringTable.lookup(std::string(""))), os);
   } else {
-    emit_move(ACC, ZERO, os);	// Void pointer is default initialization
+    emit_load(RegisterValue(ARG0), Immediate16(static_cast<int16_t>(0)), os);	// Void pointer is default initialization
   }
 }
 
 void Ref::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   if (name_ == self) {
-    emit_move(ACC, SELF, os);
+    emit_load(rDE, SELF, os);
+    os << EX << rDE << "," << rHL << std::endl;
   } else {
-    MemoryLocation* offset = varEnv.Lookup(name_);
-    offset->emit_load_from_loc(ACC, os);
+  	const MemoryLocation& loc = varEnv.Lookup(name_);
+  	if (loc.kind() == MemoryLocation::Kind::ABS) {
+  		emit_load(ARG0, loc, os);
+  	} else if (loc.kind() == MemoryLocation::Kind::PTR) {
+  		const RegisterPointer& ptr = (const RegisterPointer&) loc;
+  		emit_load(ARG0.low(), ptr, os);
+  		emit_inc(ptr.reg(), os);
+  		emit_load(ARG0.high(), ptr, os);
+  		emit_dec(ptr.reg(), os);
+  	} else if (loc.kind() == MemoryLocation::Kind::PTR_OFF) {
+  		// really, only this case should be called
+  		const RegisterPointerOffset& ptr_off = (const RegisterPointerOffset&) loc;
+  		emit_load(ARG0.low(), ptr_off[0], os);
+  		emit_load(ARG0.high(), ptr_off[1], os);
+  	} else {
+  		assert (false);
+  	}
   }
 }
 
 void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // is the resulting object a Bool? (otherwise an Int)
-  bool bool_result = (kind_ == BO_LT || kind_ == BO_EQ || kind_ == BO_LE);
-  
-  emit_partial_load_address(ACC, os);
-  os << (bool_result? BOOLNAME : INTNAME) << PROTOBJ_SUFFIX << std::endl;
-  emit_move(T5, RA, os);
-  emit_copy(os);
-  emit_move(RA, T5, os);
-  emit_push(ACC, os);	// push new object (of Bool or Int type) onto stack
-  
-  lhs_->CodeGen(varEnv, os); // evaluate left first
-  emit_push(ACC, os);
-  rhs_->CodeGen(varEnv, os); // evaluate right
-  emit_pop(T1, os);
-  emit_move(T2, ACC, os);
-  
-  if (kind_ != BO_EQ && lhs_->type() == Int && rhs_->type() == Int) {
-    // fetch int32 values into T1 & T2
-    emit_fetch_int(T1, T1, os);
-    emit_fetch_int(T2, T2, os);
-    
-    switch (kind_) {
-    case BO_Add:
-      emit_addu(ACC, T1, T2, os);
-      break;
-    case BO_Sub:
-      emit_sub(ACC, T1, T2, os);
-      break;
-    case BO_Mul:
-      emit_mul(ACC, T1, T2, os);
-      break;
-    case BO_Div:
-      emit_div(ACC, T1, T2, os);
-      break;
-    case BO_LT:
-      emit_load_imm(ACC, 1, os);
-      emit_blt(T1, T2, label_counter, os);
-      emit_move(ACC, ZERO, os);
-      emit_label_def(label_counter++, os); 
-      break;
-    case BO_LE:
-      emit_load_imm(ACC, 1, os);
-      emit_bleq(T1, T2, label_counter, os); // TBI
-      emit_move(ACC, ZERO, os);
-      emit_label_def(label_counter++, os);
-      break;
-    default:
-      std::clog << "BinaryOperator::CodeGen - default branch in switch should never be reached." << std::endl;
-    }
-    emit_pop(T1, os); // pop new object into ACC
-    if (bool_result) {
-      emit_store_bool(ACC, T1, os);
-    } else {
-      emit_store_int(ACC, T1, os); // store result in T1 to Int obj in ACC
-    }
-    emit_move(ACC, T1, os);
-  } else {
-    // equality operator
-    const int equal_end = label_counter++;
-    
-    emit_move(T5, RA, os);
-    emit_move(A1, ZERO, os);	// FALSE
-    emit_load_imm(ACC, 1, os); // TRUE
-    emit_beq(T1, T2, equal_end, os); // pointer equality => object equality (for basic & non-basic types)
-    emit_equality_test(os); // returns FALSE if objects of non-basic, mismatching type or otherwise unequal
-    emit_move(RA, T5, os);
-    
-    emit_label_def(equal_end, os);
-    emit_pop(T1, os); // Bool object to store to
-    emit_store_bool(ACC, T1, os); // store result into T1
-    emit_move(ACC, T1, os); // final result in ACC
-  }
+//   if (lhs_->type() == Int) {
+  	if (type() == Int) {
+	  	// if result is Int, create new int object
+  		emit_load(RegisterValue(ARG0), LabelValue(std::string(INTNAME) + std::string(PROTOBJ_SUFFIX)), os);
+  		emit_copy(os);
+		emit_push(ARG0, os);
+  	}
+	
+  	lhs_->CodeGen(varEnv, os);
+  	emit_push(ARG0, os);
+  	rhs_->CodeGen(varEnv, os);
+  	emit_pop(rDE, os);
+  	
+  	if (type() == Int) {
+  		emit_fetch_int(RegisterValue(rBC), RegisterPointer(rHL), os);
+  		os << EX << rDE << "," << rHL << std::endl;
+  		emit_fetch_int(RegisterValue(rDE), RegisterPointer(rHL), os);
+  		os << EX << rDE << "," << rHL << std::endl;
+  	} else if (type() == Bool) {
+  		emit_fetch_bool(RegisterValue(rBC), RegisterPointer(rHL), os);
+  		os << EX << rDE << "," << rHL << std::endl;
+  		emit_fetch_bool(RegisterValue(rDE), RegisterPointer(rHL), os);
+  		os << EX << rDE << "," << rHL << std::endl;
+  	} else {
+  		os << EX << rDE << "," << rHL << std::endl;
+  		emit_load(rB, rD, os);
+  		emit_load(rC, rE, os);
+  	}
+  	
+  	// rHL = lhs, rBC = rhs
+  	const int l_true = label_counter++;
+  	const int l_end = label_counter++;
+  	
+  	switch (kind_) {
+  	case BO_Add:
+  		emit_add(rHL, rBC, os);
+  		break;
+  	case BO_Sub:
+  		// need to negate rBC
+  		emit_cpl(rBC, os);
+		os << SCF << std::endl;
+		emit_adc(rHL, rBC, os);
+  		break;
+  	case BO_Mul:
+  		{
+  		// fast multiplication algorithm
+  		emit_load(rC, rH, os); // save high byte
+  		emit_load(ACC, rL, os);
+  		AbsoluteAddress mul_de_a(Routine::find("MUL_DE_A")->ref());
+  		emit_call(mul_de_a, nullptr, os); // result in HL
+  		AbsoluteAddress mul_c_d(Routine::find("MUL_C_D")->ref());
+  		emit_call(mul_c_d, nullptr, os);
+  		emit_load(rD, rA, os);
+  		emit_load(rE, Immediate8(static_cast<int8_t>(0)), os);
+  		emit_add(rHL, rDE, os);
+		break;
+		}
+  	case BO_Div:
+  		{
+  		// fast division (not signed yet...)
+  		emit_load(rD, rB, os);
+  		emit_load(rE, rC, os);// LD de,bc
+  		AbsoluteAddress div_hl_de(Routine::find("DIV_HL_DE")->ref());
+  		emit_call(div_hl_de, nullptr, os);
+  		emit_pop(rDE, os);
+  		break;
+  		}
+	case BO_LT:
+		os << SCF << std::endl;
+		os << CCF << std::endl;
+		os << SBC << rHL << "," << rBC << std::endl;
+		emit_load(RegisterValue(rHL), CgenRef(true), os);
+		emit_jr(l_true, Flags::C, os);
+		emit_load(RegisterValue(rHL), CgenRef(false), os);
+		emit_label_def(l_true, os);
+		break;
+	case BO_LE:
+		os << SCF << std::endl;
+		os << SBC << rHL << "," << rBC << std::endl;
+		emit_load(RegisterValue(rHL), CgenRef(true), os);
+		emit_jr(l_true, Flags::C, os);
+		emit_load(RegisterValue(rHL), CgenRef(false), os);
+		emit_label_def(l_true, os);
+		break;
+		
+	case BO_EQ:
+		os << SCF << std::endl;
+		os << CCF << std::endl;
+		os << SBC << rHL << "," << rBC << std::endl;
+		emit_load(RegisterValue(rHL), CgenRef(true), os);
+		emit_jr(l_end, Flags::Z, os);
+		emit_load(RegisterValue(rHL), CgenRef(false), os);
+		emit_label_def(l_end, os);
+		break;
+	
+  	default:
+  		assert (false);
+  	}
+  	
+  	if (type() == Int) {
+  		os << EX << "de,hl" << std::endl; // exchange values
+  		emit_pop(ARG0, os); // pop off copied protoype int obj
+  		const RegisterPointer new_int(ARG0);
+  		emit_store_int(rDE, new_int, os);
+  	} else {
+  		assert (type() == Bool);
+  		// ARG0 already equals bool
+  	}
 }
 
 void UnaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  bool bool_result = (kind_ != UO_Neg);
-  
-  emit_partial_load_address(ACC, os);
-  os << (bool_result? BOOLNAME : INTNAME) << PROTOBJ_SUFFIX << std::endl;
-  emit_move(T5, RA, os);
-  emit_copy(os);
-  emit_move(RA, T5, os);
-  emit_push(ACC, os);	// push new object (of Bool or Int type) onto stack
-  
-  // evaluate input expression
-  input_->CodeGen(varEnv, os);
+	const int l_end = label_counter++;
+
   switch (kind_) {
   case UO_Neg:
-    emit_fetch_int(T1, ACC, os);
-    emit_neg(T1, T1, os);
-    break;
+   {
+  	assert (input_->type() == Int);
+  	
+  	const std::string protobj(std::string(INTNAME) + std::string(PROTOBJ_SUFFIX));
+  	emit_load(RegisterValue(ARG0), LabelValue(protobj), os);
+  	emit_copy(os);
+  	emit_push(ARG0, os);
+  	
+  	input_->CodeGen(varEnv, os);
+  	
+  	emit_fetch_int(rDE, RegisterPointer(ARG0), os);
+  	emit_load(ACC, rD, os);
+  	os << CPL << std::endl;
+  	emit_load(rD, ACC, os);
+  	emit_load(ACC, rE, os);
+	os << CPL << std::endl;
+	emit_load(rE, ACC, os);
+	emit_pop(ARG0, os);
+	emit_store_int(rDE, RegisterPointer(ARG0), os);
+	break;
+  	}
   case UO_Not:
-    emit_fetch_bool(T1, ACC, os);
-    os << XORI << T1 << " " << T1 << " " << 1 << std::endl;    // use XOR to flip bool val
-    break;
-  case UO_IsVoid:
-    emit_load_imm(T1, 1, os);	// T1 <- true
-    os << MOVN << T1 << " " << ZERO << " " << ACC << std::endl;	// if ACC points to object, then T1 <- false 
-    break;
+  	assert (input_->type() == Bool);
+  	input_->CodeGen(varEnv, os);
+  	emit_fetch_bool(rDE, RegisterPointer(ARG0), os);
+  	os << XOR << rA << std::endl;
+  	os << OR << rD << std::endl;
+  	os << OR << rE << std::endl;
+  	emit_load(RegisterValue(ARG0), CgenRef(true), os);
+  	emit_jr(l_end, Flags::NZ, os);
+  	emit_load(RegisterValue(ARG0), CgenRef(false), os);
+  	emit_label_def(l_end, os);
+  	break;
+  
+  case UO_IsVoid:  	
+  	input_->CodeGen(varEnv, os);
+  	os << XOR << rA << std::endl;
+  	os << OR << rH << std::endl;
+  	os << OR << rL << std::endl;
+  	emit_load(RegisterValue(ARG0), CgenRef(true), os);
+  	emit_jr(l_end, Flags::NZ, os);
+  	emit_load(RegisterValue(ARG0), CgenRef(false), os);
+  	emit_label_def(l_end, os);
+  	break;
+  
+  default:
+  	assert (false);
   }
-  emit_pop(ACC, os);
-  if (bool_result) {
-    emit_store_bool(T1, ACC, os);
-  } else {
-    emit_store_int(T1, ACC, os);
-  }
+  
 }
 
 void Knew::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   if (name_ == SELF_TYPE) {
-    emit_load(ACC, TAG_OFFSET, SELF, os);
-    emit_sll(ACC, ACC, LOG_WORD_SIZE+1, os); // offset of protObj of dynamic type
-    emit_partial_load_address(T5, os);
-    os << CLASSOBJTAB << std::endl;
-    emit_addu(T5, T5, ACC, os);
-    emit_load(ACC, 0, T5, os);
-    
-    emit_push(RA, os);
-    emit_copy(os); // ACC contains pointer to uninitialized copy
-    emit_addiu(T5, T5, 4, os);  // now points to init method of dynamic type
-    emit_load(T1, 0, T5, os); // $t1 now contains address of init method
-    emit_jalr(T1, os);
-    emit_pop(RA, os);
+  	// retrieve class tag,
+  	// lookup location of prototype object,
+  	// copy object
+  	const int l_ret = label_counter++;
+  	const RegisterPointerOffset tag_loc(SELF, TAG_OFFSET);
+  	emit_load(ARG0, tag_loc, os);
+  	emit_add(ARG0, ARG0, os);
+  	emit_add(ARG0, ARG0, os);
+  	emit_load(RegisterValue(rDE), LabelValue(CLASSOBJTAB), os);
+  	emit_add(ARG0, rDE, os);	// (ARG0) = protobj
+  	emit_load(rDE, RegisterPointer(ARG0), os);
+  	os << EX << rDE << "," << rHL << std::endl;
+  	emit_push(rDE, os); // save pointer to protobj
+  	emit_copy(os);
+  	emit_pop(rDE, os);
+  	emit_inc(rDE, os);
+  	emit_inc(rDE, os); // (de) = init
+  	os << EX << rDE << "," << rHL << std::endl;
+  	emit_load(rBC, RegisterPointer(ARG0), os);
+  	emit_load(RegisterValue(ARG0), LabelValue(label_ref(l_ret)), os);
+  	emit_push(ARG0, os);
+  	emit_push(rBC, os); // init method
+  	os << EX << rDE << "," << rHL << std::endl; // HL = new obj
+  	emit_return(nullptr, os); // hacky function call equivalent
   } else {
-    emit_partial_load_address(ACC, os);
-    os << name_ << PROTOBJ_SUFFIX << std::endl;
-    emit_push(RA, os);
-    emit_copy(os);
-    emit_init(name_, os);  
-    emit_pop(RA, os);  
+  	const std::string prot = std::string(name_->value()) + std::string(PROTOBJ_SUFFIX);
+  	emit_load(RegisterValue(ARG0), LabelValue(prot), os);
+  	emit_copy(os);
+  	emit_init(name_, os);  
   }
 }
 
 void KaseBranch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // need to store location
-  MemoryLocation* case_branch_var = new IndirectLocation(-varEnv.IncTemporaryCount(), FP);
-  varEnv.Push(name_, case_branch_var);
+  RegisterPointerOffset branch_var_loc(FP, -varEnv.IncTemporaryCount() * WORD_SIZE);
+  varEnv.Push(name_, branch_var_loc);
   
-  // expect address to be in register T1
-  case_branch_var->emit_store_to_loc(T1, os); // store to assigned temporary slot
-  int class_tag = gCgenKlassTable->TagFind(decl_type_);
-  emit_load_imm(T2, class_tag, os);
-  emit_store(T2, TAG_OFFSET, T1, os); // change type of object to match case branch
+  // expect address of evaluated objetc expr0 to be held in rBC
+  emit_load(branch_var_loc, rBC, os);	// save expr0 object
   
   body_->CodeGen(varEnv, os);
   
   varEnv.Pop(name_);
   varEnv.DecTemporaryCount();
-  delete case_branch_var;
 }
 
 void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  const int case_loop = label_counter;
-  const int case_loop2 = label_counter+1;
-  const int case_abort = label_counter+2;
-  const int case_abort2 = label_counter+3;
-  const int case_table = label_counter+4;
-  const int case_esac = label_counter+5;
-  label_counter += 6;
+  const int case_loop = label_counter++;
+  const int case_loop_continue = label_counter++;
+  const int case_loop2 = label_counter++;
+  const int case_loop2_continue = label_counter++;
+  const int case_found = label_counter++;
+  const int case_default = label_counter++;
+  const int case_abort2 = label_counter++;
+  const int case_table = label_counter++;
+  const int case_end = label_counter++;
+  
+  const int case_table_entry_size = 2*WORD_SIZE;
 
   input_->CodeGen(varEnv, os);  // evaluate case expr
-  emit_beqz(ACC, case_abort2, os); // abort if void
-  emit_load(T1, TAG_OFFSET, ACC, os); // get type of input
   
-  // generate sets of class tags that inherit from declared type of each case branch
-  std::map<CgenNode::ClassTag, CgenNode::ClassTagSet> class_tag_sets;
-  for (KaseBranch* kase_branch : *cases_) {
-    CgenNode* node = gCgenKlassTable->ClassFind(kase_branch->decl_type());
-    CgenNode::ClassTag tag = gCgenKlassTable->TagFind(kase_branch->decl_type());
-    class_tag_sets[tag] = CgenNode::ClassTagSet(); // add to map
-    node->GetSubtreeClassTags(class_tag_sets[tag]);
+  os << XOR << ACC << std::endl;
+  os << OR << rH << std::endl;
+  os << OR << rL << std::endl;
+  emit_jp(case_abort2, Flags::Z, os); // case abort 2 -- expr is void
+  
+  emit_push(rHL, os); // preserve result of expr0
+  emit_load(RegisterValue(rDE), Immediate16(static_cast<int16_t>(TAG_OFFSET*WORD_SIZE)), os);
+  emit_add(ARG0, RegisterValue(rDE), os);
+  emit_load(RegisterValue(rDE), RegisterPointer(ARG0), os);
+  // de = tag of expr0
+  emit_load(RegisterValue(rHL), LabelValue(INHERITANCE_TREE), os);
+  
+  const double log_entry_length_d = std::log2(CgenLayout::InheritanceTree::entry_length);
+  if (log_entry_length_d == (double)((int) log_entry_length_d))	{
+  	// then entry_length = 2^c for some integer c
+  	// can optimize
+  	const int log_entry_length = (int) log_entry_length_d;
+  	
+  	os << EX << rDE << "," << rHL << std::endl;
+  	for (int i = 0; i < log_entry_length; ++i) {
+  		emit_add(rHL, rHL, os); // faster than bit shifting
+  	}
+  	emit_add(rHL, rDE, os);
+  } else {
+  	// need to repeatedly add de to hl
+  	for (int i = 0; i < CgenLayout::InheritanceTree::entry_length; ++i) {
+	  	emit_add(rHL, rDE, os);
+	}
   }
+  // hl = beginning of typeid's entry in inheritance table  
   
-  // T1 contains case-expr CLASS id
-  // T2 contains tag to set for new obj copy in case branch
-  // T3 contains current "candidate" tag
-  // T5 contains label for appropriate case branch
+  // now, find optimal branch type match search order
+  	const CgenNode *exp0_node = gCgenKlassTable->ClassFind(input_->type());
+	std::vector<const CgenNode *> subclass_nodes, superclass_nodes;
+	std::unordered_map<const CgenNode *, const KaseBranch *> subclass_map, superclass_map;
+	for (const KaseBranch *branch : *cases_) {
+		const CgenNode *node = gCgenKlassTable->ClassFind(branch->decl_type());
+		if (node <= exp0_node) {
+			subclass_nodes.push_back(node);
+			subclass_map[node] = branch;
+		} else if (exp0_node >= node) {
+			superclass_nodes.push_back(node);
+			superclass_map[node] = branch;
+		}
+	}
+	
+	auto sort_nodes = [&](const CgenNode *lhs, const CgenNode *rhs) {
+		std::pair<bool,int> leftchild = gCgenKlassTable->InheritanceDistance(lhs, exp0_node);
+		std::pair<bool,int> rightchild = gCgenKlassTable->InheritanceDistance(rhs, exp0_node);
+		assert (leftchild.first && rightchild.first);
+		return leftchild.second < rightchild.second;
+	};
+	
+	// sort nodes based on inheritance distance
+	std::sort(subclass_nodes.begin(), subclass_nodes.end(), sort_nodes);
+	const CgenNode *super_node;
+	const KaseBranch *super_branch;
+	if (superclass_nodes.size() > 0) {
+		super_node = *std::min_element(superclass_nodes.begin(), superclass_nodes.end(), sort_nodes);
+		super_branch = superclass_map[super_node];
+	} else {
+		super_node = nullptr;
+		super_branch = nullptr;
+	}
+	
+	std::unordered_map<const CgenNode *, int> branch_labels;
+	for (const CgenNode *node : subclass_nodes) {
+		branch_labels[node] = label_counter++;
+	}
+	branch_labels[super_node] = label_counter++;
   
-  // init
-  emit_push(ACC, os); // preserve ptr to case expr
-  emit_partial_load_address(ACC, os);
-  emit_label_ref(case_table, os); os << std::endl;
-  // main loop
-  emit_label_def(case_loop, os);
-  emit_load(T2, 0, ACC, os); // class tag for branch
-  emit_bltz(T2, case_abort, os);
-  emit_load(T5, 1, ACC, os); // label for branch
-  emit_addiu(ACC, ACC, WORD_SIZE*2, os);
-  // inner loop
-  emit_label_def(case_loop2, os);
-  emit_load(T3, 0, ACC, os); // get "candidate" tag
-  emit_addiu(ACC, ACC, WORD_SIZE*1, os);
-  emit_bltz(T3, case_loop, os); // end of section
-  emit_bne(T1, T3, case_loop2, os); // continue in section if tag doesn't match
-  
-  emit_pop(T1, os); // pop pointer to obj (expected in T1 by case branch)
-  emit_jr(T5, os);	  // execute branch
-  
-  // case_abort: no match found
-  emit_label_def(case_abort, os);
-  emit_pop(ACC, os);
-  emit_jalr("_case_abort", os);
-  
-  // case_abort_2: case on void expr
-  emit_label_def(case_abort2, os);
-  emit_load_imm(T1, this->loc(), os);
-  emit_partial_load_address(ACC, os);
-  CgenRef(os, gStringTable.lookup(varEnv.klass_->filename()->value()));
-  os << std::endl;
-  emit_jalr("_case_abort2", os);
-  
-  std::map<CgenNode::ClassTag,int> tags_to_labels;
-  // now emit code for case branches
-  for (KaseBranch* branch : *cases_) {
-    CgenNode::ClassTag branch_tag = gCgenKlassTable->TagFind(branch->decl_type());
-    int branch_label = label_counter++;
-    tags_to_labels[branch_tag] = branch_label;
-    emit_label_def(branch_label, os);
-    branch->CodeGen(varEnv, os);
-    emit_branch(case_esac, os);
-  }
-  
-  // iteratively find shortest list (guaranteed to be least or have no children among remaining types )
-  // output list of "qualifying" class tags
-  // (use O(n^2) algorithm for now -- maybe improve later?
-  emit_label_def(case_table, os); // beginning of table
-  while (!class_tag_sets.empty()) {
-    int min_size = INT_MAX; CgenNode::ClassTag min_branch;
-    for (std::map<CgenNode::ClassTag,CgenNode::ClassTagSet>::iterator set_it = class_tag_sets.begin(); set_it != class_tag_sets.end(); ++set_it) {
-      if (set_it->second.size() < min_size) {
-        min_branch = set_it->first;
-        min_size = class_tag_sets[min_branch].size();
-      }
-    }
-    
-    // emit header for each case branch
-    // - class tag of branch object
-    // - branch label (to jump to)
-    os << WORD << min_branch << std::endl;
-    os << WORD; emit_label_ref(tags_to_labels[min_branch], os); os << std::endl;
-    
-    // emit list of matching class tags
-    CgenNode::ClassTagSet tag_set = class_tag_sets[min_branch];
-    for (CgenNode::ClassTagSet::iterator tag_it = tag_set.begin(); tag_it != tag_set.end(); ++tag_it) {
-      os << WORD << *tag_it << std::endl;
-    }
-    // mark end of qualifying list with -1
-    os << WORD << -1 << std::endl;
-    class_tag_sets.erase(min_branch);
-  }
-  // emit final -1 to indicate runtime error, i.e. no branches matched
-  os << WORD << -1 << std::endl;
-  
-  emit_label_def(case_esac, os);	// exit point of case statement
+  	  // now, search for closest matching branch
+	// remember hl = expr0's typeid entry address in inheritance table
+	const Register16* rCASETAB = &rHL; // de holds current case/branch table address
+	const Register16* rTYPETAB = &rDE; // hl holds current inheritance table address
+	const Register16* rCASEID = &rBC; // bc holds typeid in tree TYPEID = (TYPETAB)
+		
+	emit_load(RegisterValue(*rCASETAB), LabelValue(label_ref(case_table)), os);
+	emit_label_def(case_loop, os);
+		emit_load(*rCASEID, RegisterPointer(*rCASETAB), os); // bc = type tag for current branch
+		os << BIT << 7 << "," << rCASEID->high() << std::endl;
+		emit_jr(case_default, Flags::NZ, os);// if caseid < 0, then end of table has been reached
+		emit_push(*rTYPETAB, os); // preserve address of expr0 in inheritance table
+		os << EX << *rTYPETAB << "," << *rCASETAB << std::endl;
+		std::swap(rCASETAB, rTYPETAB);
+				
+		// only have to check up to the statically inferred class of expr0
+		// inner loop to compare	
+		// within inner loop, rTYPETAB = hl, rCASETAB = de	
+		emit_label_def(case_loop2, os);			
+			emit_load(ACC, rCASEID->low(), os);
+			emit_cp(RegisterPointer(*rTYPETAB), os);
+			emit_jr(case_loop2_continue, Flags::NZ, os);
+			emit_load(ACC, rCASEID->high(), os);
+			emit_inc(*rTYPETAB, os);
+			emit_cp(RegisterPointer(*rTYPETAB), os);
+			emit_jr(case_found, Flags::Z, os);
+		emit_label_def(case_loop2_continue, os);
+			emit_inc(*rTYPETAB, os);
+			// rTYPETAB points to relative offset of parent
+			emit_push(rBC, os);
+			emit_load(rBC, RegisterPointer(*rTYPETAB), os);
+			os << XOR << ACC << std::endl;
+			emit_or(rB, os);
+			emit_or(rC, os);
+			emit_add(*rTYPETAB, rBC, os); // this doesn't affect Z flag, thankfully
+			emit_pop(rBC, os);
+			emit_jr(case_loop2, Flags::NZ, os);
+// 			emit_jr(LabelValue(case_loop_continue), Flags::Z, os); // if bc = 0, then reached root node			
+			///////////
+	emit_label_def(case_loop_continue, os);
+		os << EX << *rCASETAB << "," << *rTYPETAB << std::endl;
+		std::swap(rCASETAB, rTYPETAB);
+		
+		emit_pop(*rTYPETAB, os);
+		for (int i = 0; i < case_table_entry_size; ++i) {
+			emit_inc(*rCASETAB, os);
+		}
+		emit_jr(case_loop, Flags::none, os);
+			
+	emit_label_def(case_found, os);
+	std::swap(rCASETAB, rTYPETAB);
+		os << EX << rDE << "," << rHL << std::endl;
+		std::swap(rCASETAB, rTYPETAB);
+		emit_pop(rBC, os); // rBC won't be used, but need to pop off temp value from case_loop
+		for (int i = 0; i < WORD_SIZE; ++i) {
+			emit_inc(*rCASETAB, os);
+		}
+		// (rCASETAB) = address of branch
+		emit_load(rDE, RegisterPointer(*rCASETAB), os);
+		emit_pop(rBC, os); // rBC = expr0
+		os << EX << rDE << "," << rHL << std::endl;
+		std::swap(rCASETAB, rTYPETAB);
+		emit_load(RegisterValue(rDE), LabelValue(label_ref(case_end)), os);
+		emit_push(rDE, os); // return address
+		emit_jp(RegisterPointer(rHL), Flags::none, os);	// jump to corresponding branch
+	std::swap(rCASETAB, rTYPETAB);
+		
+	emit_label_def(case_default, os); // no matching branch, so check for superclass
+		if (super_node) {
+			// since super node present, this is default case.
+			// simply call this branch
+			emit_pop(rBC, os); // rBC = expr0
+			const AbsoluteAddress addr(label_ref(branch_labels[super_node]));
+			emit_call(addr, Flags::none, os);
+			emit_jr(case_end, Flags::none, os);
+		} else {
+			// throw case_abort error.
+			// implement l8ter
+			emit_pop(ARG0, os); // _case_abort needs this
+			const AbsoluteAddress addr("_case_abort");
+			emit_jp(addr, Flags::none, os);
+		}
+	
+	emit_label_def(case_abort2, os);
+		// expr0 is void
+		os << LD << ARG0 << "," << CgenRef(gStringTable.lookup(varEnv.klass_->filename()->value())) << std::endl;
+		os << LD << rDE << "," << this->loc() << std::endl;
+		const AbsoluteAddress addr("_case_abort2");
+		emit_jp(addr, Flags::none, os);
+		
+
+	// generate case branch table
+	// contents of each entry:
+	//    * type id (2 bytes)
+	//    * address of branch (2 bytes)
+	emit_label_def(case_table, os);
+	
+	for (const CgenNode *node : subclass_nodes) {
+		const CgenNode::ClassTag tag = node->tag();
+		os << DW << tag << std::endl;
+		os << DW << label_ref(branch_labels[node]) << std::endl;
+	}
+	os << DW << -1 << std::endl; // marks end of table;
+
+
+	emit_label_def(case_end, os);
 }
 
 void Let::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // SELF_TYPE not allowed, so don't need to consider
-  MemoryLocation* let_var = new IndirectLocation(-varEnv.IncTemporaryCount(), FP);
+  RegisterPointerOffset let_var(FP, -varEnv.IncTemporaryCount() * WORD_SIZE);
   varEnv.init_type_ = decl_type_;
   
   init_->CodeGen(varEnv, os);
   varEnv.Push(name_, let_var);
-  let_var->emit_store_to_loc(ACC, os);
+  emit_load(let_var, ARG0, os);
   
   body_->CodeGen(varEnv, os);
   
   varEnv.Pop(name_);
   varEnv.init_type_ = nullptr;
   varEnv.DecTemporaryCount();
-  delete let_var;	// cleanup
+  // 
+//   
+//   
+//   MemoryLocation* let_var = new IndirectLocation(-varEnv.IncTemporaryCount(), FP);
+//   varEnv.init_type_ = decl_type_;
+//   
+//   init_->CodeGen(varEnv, os);
+//   varEnv.Push(name_, let_var);
+//   let_var->emit_store_to_loc(ACC, os);
+//   
+//   body_->CodeGen(varEnv, os);
+//   
+//   varEnv.Pop(name_);
+//   varEnv.init_type_ = nullptr;
+//   varEnv.DecTemporaryCount();
+//   delete let_var;	// cleanup
 }
 
 void Block::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
@@ -1198,13 +1828,18 @@ void Loop::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   
   emit_label_def(label_loop_pred, os);
   pred_->CodeGen(varEnv, os);
-  emit_fetch_bool(ACC, ACC, os);
-  emit_beqz(ACC, label_loop_end, os);
+  emit_fetch_bool(RegisterValue(rBC), RegisterPointer(ARG0), os);
+//   emit_beqz(ACC, label_loop_end, os);
+  os << XOR << ACC << std::endl;
+  emit_or(rB, os);
+  emit_or(rC, os);
+  emit_jp(label_loop_end, Flags::Z, os);
+  
   body_->CodeGen(varEnv, os);
-  emit_branch(label_loop_pred, os);
+  emit_jp(label_loop_pred, nullptr, os);
   
   emit_label_def(label_loop_end, os);	// loop done
-  emit_move(ACC, ZERO, os); // evaluates to VOID
+  emit_load(RegisterValue(ARG0), Immediate16(static_cast<int16_t>(0)), os); // loop evaluates to void
 }
 
 void Cond::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
@@ -1213,11 +1848,16 @@ void Cond::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   
   // evaluate predicate
   pred_->CodeGen(varEnv, os); // if
-  emit_fetch_bool(ACC, ACC, os); // get bool value
-  emit_beqz(ACC, label_else, os); // branch to 'else' if false
+  emit_fetch_bool(RegisterValue(rDE), RegisterPointer(ARG0), os); // get bool value
+  os << XOR << ACC << std::endl;
+  emit_or(rD, os);
+  emit_or(rE, os);
+  emit_jp(label_else, Flags::Z, os);
+//   emit_beqz(ACC, label_else, os); // branch to 'else' if false
   
   then_branch_->CodeGen(varEnv, os); // then
-  emit_branch(label_fi, os);
+//   emit_branch(label_fi, os);
+	emit_jp(label_fi, nullptr, os);
   
   emit_label_def(label_else, os); // else
   else_branch_->CodeGen(varEnv, os);
@@ -1233,79 +1873,86 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // 1. evaluate actuals
   // 2. evaluate receiver
   
-  emit_push(RA, os);
+//   emit_push(RA, os);
   for (Expression* expr : *actuals_) {
     expr->CodeGen(varEnv, os);
-    emit_push(ACC, os);
+    emit_push(ARG0, os);
   }
 
   receiver_->CodeGen(varEnv, os);
-  emit_beqz(ACC, dispatch_abort, os); // abort if void
+  os << XOR << ACC << std::endl;
+  emit_or(rH, os);
+  emit_or(rL, os);
+  emit_jr(dispatch_abort, Flags::Z, os); // abort if receiver is void
   
   // call static method on given class
-  emit_partial_load_address(T1, os);
-  os << dispatch_type_ << METHOD_SEP << name_ << std::endl;
-  emit_partial_load_address(RA, os); emit_label_ref(dispatch_end, os); os << std::endl;
-  emit_jr(T1, os);
-  
-  // dispatch_abort
-  emit_label_def(dispatch_abort, os);
-  emit_load_imm(T1, this->loc(), os);
-  emit_partial_load_address(ACC, os);
-  CgenRef(os, gStringTable.lookup(varEnv.klass_->filename()->value()));
-  os << std::endl;
-  emit_jalr("_dispatch_abort", os);
-  
-  // dispatch end
-  emit_label_def(dispatch_end, os);
-  emit_pop(RA, os);
+  os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
+  emit_jr(dispatch_end, nullptr, os);
+
+	emit_label_def(dispatch_abort, os);
+	emit_load(RegisterValue(rDE), Immediate16(static_cast<uint16_t>(this->loc())), os);
+	emit_load(RegisterValue(ARG0), CgenRef(gStringTable.lookup(varEnv.klass_->filename()->value())), os);
+	const AbsoluteAddress disp_abort("_dispatch_abort");
+	emit_jp(disp_abort, Flags::none, os);
+
+	emit_label_def(dispatch_end, os);
 }
 
 void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
-  const int dispatch_end = label_counter;
-  const int dispatch_abort = label_counter+1;
-  label_counter += 2;
+  const int dispatch_end = label_counter++;
+  const int dispatch_abort = label_counter++;
 
-  emit_push(RA, os);
+//   emit_push(RA, os);
   for (Expression* expr : *actuals_) {
     expr->CodeGen(varEnv, os);
-    emit_push(ACC, os);
+    emit_push(ARG0, os);
   }
   
   receiver_->CodeGen(varEnv, os);
-  emit_beqz(ACC, dispatch_abort, os); // check if void
+  os << XOR << ACC << std::endl;
+  emit_or(rH, os);
+  emit_or(rL, os);
+  emit_jr(dispatch_abort, Flags::Z, os); // if receiver is void, call dispatch_abort
   
-  emit_load(T1, DISPTABLE_OFFSET, ACC, os);  // get pointer to dispatch table of receiver
+  emit_load(RegisterValue(rDE), Immediate16(static_cast<int16_t>(DISPTABLE_OFFSET * WORD_SIZE)), os);
+  os << EX << rDE << "," << rHL << std::endl;
+  emit_add(ARG0, rDE, os); // ARG0 -> pointer to disptable for class
+  emit_load(RegisterValue(rBC), RegisterPointer(ARG0), os); // rBC = address of disptable
   
-  MemoryLocation* method_offset;
+  int16_t method_offset;
   if (receiver_->type() == SELF_TYPE) {
-    method_offset = gCgenDispatchTables[varEnv.klass_->name()][name_];
+  	method_offset = gCgenDispatchTables[varEnv.klass_->name()][name_]->offset();
   } else {
-    method_offset = gCgenDispatchTables[receiver_->type()][name_];
+  	method_offset = gCgenDispatchTables[receiver_->type()][name_]->offset();
   }
-  emit_addiu(T1, T1, WORD_SIZE*method_offset->offset(), os);
-  emit_load(T1, 0, T1, os); // retrieve method address
-  emit_partial_load_address(RA, os); emit_label_ref(dispatch_end, os); os << std::endl;
-  emit_jr(T1, os);
   
-  // dispatch_abort
-  emit_label_def(dispatch_abort, os);
-  emit_load_imm(T1, this->loc(), os);
-  emit_partial_load_address(ACC, os);
-  CgenRef(os, gStringTable.lookup(varEnv.klass_->filename()->value()));
-  os << std::endl;
-  emit_jalr("_dispatch_abort", os);
+  emit_load(RegisterValue(ARG0), Immediate16(method_offset), os);
+  emit_add(ARG0, rBC, os); // ARG0 = pointer to address of function to call
+  emit_load(RegisterValue(rBC), RegisterPointer(rHL), os); // rBC = address of funciton to call
   
-  // dispatch end
+  os << EX << rDE << "," << rHL << std::endl;
+  // rHL = receiver
+  emit_load(RegisterValue(rDE), LabelValue(label_ref(dispatch_end)), os); // push return address
+  emit_push(rDE, os);
+  
+  emit_push(rBC, os);
+  emit_return(Flags::none, os);     // jp (bc)
+  
+  emit_label_def(dispatch_abort, os); // if receiver is NULL
+	emit_load(RegisterValue(rDE), Immediate16(static_cast<uint16_t>(this->loc())), os);
+	emit_load(RegisterValue(ARG0), CgenRef(gStringTable.lookup(varEnv.klass_->filename()->value())), os);
+	const AbsoluteAddress disp_abort("_dispatch_abort");
+	emit_jp(disp_abort, Flags::none, os);
+
+  
   emit_label_def(dispatch_end, os);
-  emit_pop(RA, os);
 }
 
 void Assign::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // lookup memory location
-  MemoryLocation* loc = varEnv.Lookup(name_);
+  const MemoryLocation& loc = varEnv.Lookup(name_);
   value_->CodeGen(varEnv, os);
-  loc->emit_store_to_loc(ACC, os);
+  emit_load(MemoryValue(loc), ARG0, os);
 }
 
 

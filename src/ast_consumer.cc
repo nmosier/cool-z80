@@ -183,5 +183,15 @@ Klass* CreateStringKlass() {
   // @formatter:on
 }
 
+template <class Node>
+bool operator <= (const InheritanceNode<Node> *lhs, const InheritanceNode<Node> *rhs) {
+	const InheritanceNode<Node> *left = lhs;
+	
+	while (left != rhs && left->parent())
+		left = left->parent();
+		
+	return left == rhs;
+}
+
 
 } // namespace cool

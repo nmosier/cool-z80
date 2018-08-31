@@ -39,9 +39,11 @@ limitations under the License.
 #include "scopedtab.h"
 #include "ast.h"
 #include "ast_consumer.h"
+#include "register.h"
 
 #include <list>
 #include <set>
+#include <map>
 
 extern bool cgen_optimize;       // optimize switch for code generator
 extern bool disable_reg_alloc;
@@ -58,8 +60,6 @@ extern enum Memmgr_Debug { GC_QUICK, GC_DEBUG } cgen_Memmgr_Debug;
 
 
 
-
-
 namespace cool {
 
 /**
@@ -67,11 +67,29 @@ namespace cool {
  */
 extern bool gCgenDebug;
 
-#define CgenObjectLayout_AttributeOffset 3	// in words (not bytes)
+// all values in WORDS, not BYTES
+struct CgenLayout {
+	struct ActivationRecord {
+		static const int8_t callee_add_size = -2 * WORD_SIZE;
+		static const int8_t caller_self_offset = 0;
+		static const int8_t caller_frame_offset = 1 * WORD_SIZE;
+		static const int8_t arguments_end = 2 * WORD_SIZE; // one past end
+	};
+	
+	struct Object {
+		static const int8_t attribute_offset = 3 * WORD_SIZE;
+	};
+	
+	struct InheritanceTree {
+		static const int16_t entry_length = 2 * WORD_SIZE;
+	};
+};
 
-#define CgenARLayout_BaseSize 2 // # of constant fields in each AR (excludes actuals + return address)
-#define CgenARLayout_FPOffset 1 // from callee's FP
-#define CgenARLayout_SelfPOffset 0 // from callee's FP
+// #define CgenObjectLayout_AttributeOffset 3	// in words (not bytes)
+// 
+// #define CgenARLayout_BaseSize 2 // # of constant fields in each AR (excludes actuals + return address)
+// #define CgenARLayout_FPOffset 1 // from callee's FP
+// #define CgenARLayout_SelfPOffset 0 // from callee's FP
 //#define CgenARLayout_RAOffset 0 // from callee's FP
 
 /**
@@ -85,57 +103,72 @@ void Cgen(Program* program, std::ostream& os);
 class CgenKlassTable;
 
 
-class MemoryLocation {
- public:
-  MemoryLocation(int offset): offset_(offset) {}
-  virtual ~MemoryLocation() {}
-  
-  int offset() { return offset_; }
+// class MemoryLocation {
+//  public:
+//   MemoryLocation(int offset): offset_(offset) {}
+//   virtual ~MemoryLocation() {}
+//   
+//   int offset() { return offset_; }
+// 
+//   virtual bool isindirect() { return false; }
+//   virtual bool isabsolute() { return false; }
+//   virtual void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {}
+//   virtual void emit_load_from_loc(const char* dest_reg, std::ostream& s) {}
+//   virtual void emit_store_to_loc(const char* src_reg, std::ostream& s) {}
+// private:
+//   int offset_;
+// };
+// 
+// class IndirectLocation : public MemoryLocation {
+//  public:
+//   IndirectLocation(int offset, const char* base_reg): MemoryLocation(offset), base_reg_(base_reg) {}
+//   
+//   const char* base_reg() { return base_reg_; }
+//   bool isindirect() override { return true; }
+//   void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
+//   void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
+//   void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
+//  private:
+//   const char* base_reg_;
+// };
+// 
+// class AbsoluteLocation : public MemoryLocation {
+//  public:
+//   AbsoluteLocation(int offset, std::string label): MemoryLocation(offset), label_(label) {}
+//   
+//   std::string label() { return label_; }
+//   bool isabsolute() override { return true; }
+//   void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
+//   void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
+//   void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
+//  private:
+//   std::string label_;
+// };
 
-  virtual bool isindirect() { return false; }
-  virtual bool isabsolute() { return false; }
-  virtual void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {}
-  virtual void emit_load_from_loc(const char* dest_reg, std::ostream& s) {}
-  virtual void emit_store_to_loc(const char* src_reg, std::ostream& s) {}
-private:
-  int offset_;
-};
-
-class IndirectLocation : public MemoryLocation {
- public:
-  IndirectLocation(int offset, const char* base_reg): MemoryLocation(offset), base_reg_(base_reg) {}
-  
-  const char* base_reg() { return base_reg_; }
-  bool isindirect() override { return true; }
-  void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
-  void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
-  void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
- private:
-  const char* base_reg_;
-};
-
-class AbsoluteLocation : public MemoryLocation {
- public:
-  AbsoluteLocation(int offset, std::string label): MemoryLocation(offset), label_(label) {}
-  
-  std::string label() { return label_; }
-  bool isabsolute() override { return true; }
-  void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
-  void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
-  void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
- private:
-  std::string label_;
-};
-
-typedef std::unordered_map<Symbol*,MemoryLocation*> DispatchTable;
+// typedef std::unordered_map<Symbol*,AbsoluteAddress*> DispatchTable;
+class DispatchTable;
 typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
+
+class DispatchTable: public std::unordered_map<Symbol*,AbsoluteAddress*> {
+public:
+	DispatchTable& operator=(const DispatchTable &other) {
+		if (this != &other) {
+			for (std::pair<Symbol*,AbsoluteAddress*> p : other) {
+				(*this)[p.first] = new AbsoluteAddress(*p.second);
+			}
+		}
+		
+		return *this;
+	}	
+};
+
 class VariableEnvironment {
  public:
   VariableEnvironment(Klass* klass): temporary_count_(0), temporary_max_count_(0), klass_(klass), init_type_(nullptr) {}
   
-  void Push(Symbol* var, MemoryLocation* offset) { vars_[var].push_back(offset); }
+  void Push(Symbol* var, MemoryLocation& offset) { vars_[var].push_back(offset.copy()); }
   void Pop(Symbol* var) { vars_[var].pop_back(); }
-  MemoryLocation* Lookup(Symbol* var) { return vars_[var].back(); }	// returns offset  
+  MemoryLocation& Lookup(Symbol* var) { return *vars_[var].back(); }	// returns offset  
   
   int GetTemporaryCount() { return temporary_count_; }
   int GetTemporaryMaxCount() { return temporary_max_count_; }
@@ -161,31 +194,21 @@ class VariableEnvironment {
  */
 class CgenNode : public InheritanceNode<CgenNode> {
  public:
-  typedef std::size_t ClassTag;
-  typedef std::set<ClassTag> ClassTagSet;
+  typedef std::int16_t ClassTag;
   typedef std::unordered_map<Symbol*,Symbol*> MethodInheritanceTable;
  
-  CgenNode(Klass* klass, bool inheritable, bool basic) : InheritanceNode(klass, inheritable, basic), tag_(0), attrVarEnv_(klass), objectSize_(3) {}
+  CgenNode(Klass* klass, bool inheritable, bool basic) : InheritanceNode(klass, inheritable, basic), tag_(0), attrVarEnv_(klass), objectSize_(3*WORD_SIZE) {}
   ~CgenNode() {
-    for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
-      if ((*feature)->attr()) {
-        Symbol* attr_name = (*feature)->name();
-        delete attrVarEnv_.vars_[attr_name].front();
-        attrVarEnv_.vars_[attr_name].pop_front();
-      }
-    }
+//     for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
+//       if ((*feature)->attr()) {
+//         Symbol* attr_name = (*feature)->name();
+//         delete attrVarEnv_.vars_[attr_name].front();
+//         attrVarEnv_.vars_[attr_name].pop_front();
+//       }
+//     }
   }
   
-  /*
-   * Return list of class tags contained in subtree rooted at node
-   * (for use in case expression)
-   */
-  void GetSubtreeClassTags(ClassTagSet& tags) {
-    for (CgenNode* child : children_) {
-      child->GetSubtreeClassTags(tags);
-    }
-    tags.insert(tag_);
-  }
+  int16_t tag() const { return tag_; }
   
  private:
   /**
@@ -205,7 +228,7 @@ class CgenNode : public InheritanceNode<CgenNode> {
      to be used during recursive code generation
    */
   VariableEnvironment attrVarEnv_;
-  unsigned int objectSize_;
+  int objectSize_;
   
   void CreateAttrVarEnv(int next_offset);
   void CreateDispatchTables(DispatchTables& tables, int next_offset);
@@ -215,6 +238,8 @@ class CgenNode : public InheritanceNode<CgenNode> {
   
   void EmitInitializer(std::ostream& os);
   void EmitMethods(std::ostream& os);
+  
+  void EmitInheritanceInfo(std::ostream& os) const;
   
   friend class CgenKlassTable;
 };
@@ -235,18 +260,22 @@ class CgenKlassTable : public KlassTable<CgenNode> {
     return node->tag_;
   }
   
-  /*
-   * Returns whether two nodes inherit from one another
-   * Note: strictly less than ( < ) relationship
-   */
-  bool InheritsFrom(CgenNode* child, CgenNode* parent) {
-    bool isparent = true;
-    while (child != parent && child != root()) {
-      child = child->parent();
-      isparent = false;
-    }
-    return !isparent && child == parent;
-  }
+//   
+//    * Returns whether two nodes inherit from one another
+//    * Note: strictly less than ( < ) relationship
+//    */
+//   bool InheritsFrom(CgenNode* child, CgenNode* parent) {
+//     bool isparent = true;
+//     while (child != parent && child != root()) {
+//       child = child->parent();
+//       isparent = false;
+//     }
+//     return !isparent && child == parent;
+//   }
+  
+  std::pair<bool,int> InheritanceDistance(const CgenNode* node1, const CgenNode* node2) const;
+
+	std::map<std::size_t, const CgenNode *> GetTags() const;
 
   /**
    * Generate code for entire Cool program
@@ -313,6 +342,11 @@ class CgenKlassTable : public KlassTable<CgenNode> {
    * Emit code for class methods
    */
   void CgenClassMethods(std::ostream& os) const;
+  
+  /**
+   * Emit inheritance tree for case expressions
+   */
+  void CgenInheritanceTree(std::ostream& os) const;
 
 };
 

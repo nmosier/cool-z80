@@ -1,0 +1,124 @@
+#define _interrupt_hook $9A9A
+#define _keyboard_buffer saveSScreen
+#define _keyboard_buffer_end saveSScreen+768
+#define _keyboard_newline $FF
+
+_keyboard_initialize:
+	di
+	ld a,$9A
+	ld ($9900),a
+	ld hl,$9900
+	ld de,$9901
+	ld bc,256
+	ldir
+	; copy interrupt to $99xx
+	
+	ld hl,_keyboard_buffer
+	ld (_keyboard_buffer_start),hl
+	ld (_keyboard_buffer_buffered),hl
+	ld (_keyboard_buffer_input),hl
+	im 2
+	ret
+
+_keyboard_interrupt:
+	ex af,af'
+	exx
+	
+	bcall(_GetCSC)
+	
+	or a
+	jr z,_keyboard_interrupt_done
+	
+	ld hl,_keyboard_key_LUT
+	ld e,a
+	ld d,0
+	add hl,de
+	ld a,(hl)
+	
+	or a	;; unsupported key
+	jr z,_keyboard_interrupt_done
+	
+	ld hl,(_keyboard_buffer_input)
+	ld (hl),a
+	inc hl
+	ld (_keyboard_buffer_input),hl
+	
+	cp $FF
+	jr nz,_keyboard_interrupt_done
+	; enter pressed
+	ld (_keyboard_buffer_buffered),hl ; update buffered marker
+	
+_keyboard_interrupt_done:
+	exx
+	ex af,af'
+	ei
+	ret
+_keyboard_interrupt_end:
+	
+
+_keyboard_buffer_start: .dw 0		; beginning of unread input
+_keyboard_buffer_buffered: .dw 0	; (one past) end of buffered input
+_keyboard_buffer_input: .dw 0		; (one past) end of unbuffered input
+
+_keyboard_key_LUT:
+;character    ;key hex    ;keypress name
+ .db 0        ;00        none
+ .db 0        ;01        skDown
+ .db 0        ;02        skLeft
+ .db 0        ;03        skRight
+ .db 0        ;04        skUp
+ .db 0        ;05        none
+ .db 0        ;06        none
+ .db 0        ;07        none
+ .db 0        ;08        none
+ .db _keyboard_newline        ;09        skEnter
+ .db '"'        ;0A        skAdd
+ .db 'W'        ;0B        skSub
+ .db 'R'        ;0C        skMul
+ .db 'M'        ;0D        skDiv
+ .db 'H'        ;0E        skPower
+ .db 0        ;0F        skClear
+
+ .db '?'        ;10        skChs
+ .db 0        ;11        none
+ .db $5B        ;12        sk3
+ .db 'V'        ;13        sk6
+ .db 'Q'        ;14        sk9
+ .db 'L'        ;15        skRParen
+ .db 'G'        ;16        skTan
+ .db 0        ;17        skVars
+ .db 0        ;18        none
+ .db ':'        ;19        skDecPnt
+ .db 'Z'        ;1A        sk2
+ .db 'U'        ;1B        sk5
+ .db 'P'        ;1C        sk8
+ .db 'K'        ;1D        skLParen
+ .db 'F'        ;1E        skCos
+ .db 'C'        ;1F        skPrgm
+
+ .db 0        ;20        skStat
+ .db ' '        ;21        sk0
+ .db 'Y'        ;22        sk1
+ .db 'T'        ;23        sk4
+ .db 'O'        ;24        sk7
+ .db ','        ;25        skComma
+ .db 'E'        ;26        skSin
+ .db 'B'        ;27        skMatrix
+ .db 'X'        ;28        skGraphVar
+ .db 0        ;29        none
+ .db 'X'        ;2A        skSto
+ .db 'S'        ;2B        skLn
+ .db 'N'        ;2C        skLog
+ .db 'I'        ;2D        skSquare
+ .db 'D'        ;2E        skRecip
+ .db 'A'        ;2F        skMath
+
+ .db 0        ;30        skAlpha
+ .db 0        ;31        skGraph
+ .db 0        ;32        skTrace
+ .db 0        ;33        skZoom
+ .db 0        ;34        skWindow
+ .db 0        ;35        skYEqu
+ .db 0        ;36        sk2nd
+ .db 0        ;37        skMode
+ .db 0        ;38        skDel

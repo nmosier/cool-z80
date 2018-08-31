@@ -59,7 +59,7 @@ TYPE & VAR = reinterpret_cast<TYPE &>(STORE_VAR);
 
 SYMBOL_TABLE_DECLS(SymbolTable<Symbol>, gIdentTable, gIdentTableStorage);
 SYMBOL_TABLE_DECLS(SymbolTable<StringEntry>, gStringTable, gStringTableStorage);
-SYMBOL_TABLE_DECLS(SymbolTable<Int32Entry>, gIntTable, gIntTableStorage);
+SYMBOL_TABLE_DECLS(SymbolTable<Int16Entry>, gIntTable, gIntTableStorage);
 
 #undef SYMBOL_TABLE_DECLS
 
@@ -67,14 +67,14 @@ SymbolTablesInitializer::SymbolTablesInitializer () {
   if (gSymbolTableCounter++ == 0) {
     new (&gIdentTable) SymbolTable<Symbol>();
     new (&gStringTable) SymbolTable<StringEntry>();
-    new (&gIntTable) SymbolTable<Int32Entry>();
+    new (&gIntTable) SymbolTable<Int16Entry>();
   }
 }
 SymbolTablesInitializer::~SymbolTablesInitializer () {
   if (--gSymbolTableCounter == 0) {
     gIdentTable.~SymbolTable<Symbol>();
     gStringTable.~SymbolTable<StringEntry>();
-    gIntTable.~SymbolTable<Int32Entry>();
+    gIntTable.~SymbolTable<Int16Entry>();
   }
 }
 } // namespace cool

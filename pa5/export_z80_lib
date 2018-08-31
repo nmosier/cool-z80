@@ -1,0 +1,16 @@
+#!/bin/bash
+
+pushd z80_lib
+
+if [ -e "routines.cc" ]
+then
+    rm routines.cc
+fi
+touch routines.cc
+
+for z80_file in "$(ls *.z80)"
+do
+    xxd -i "$z80_file" >> routines.cc
+done
+
+popd

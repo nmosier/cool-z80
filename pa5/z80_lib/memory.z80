@@ -1,0 +1,102 @@
+;;;;;;;;;;;;;; MEMORY.Z80 ;;;;;;;;;;;;;;;;;;
+;;; EQUATES ;;;
+_MEMORY_SIZE equ $2000 ; 8 KB
+
+_memory_create_appvar:
+	; first check if memory var already exists. If so, resize
+	ld hl,_memory_appvar_sym
+	bcall(_Mov9ToOP1)
+	bcall(_ChkFindSym)
+	jr c, _memory_create_appvar_notfound ; skip ahead if not found
+	; otherwise, check size of memory block
+	; test b: b ≠ 0 if archived
+	ld a,b
+	or a
+	jr z,_memory_create_appvar_inRAM
+	bcall(_Arc_Unarc)
+	ld hl,_memory_appvar_sym
+	bcall(_Mov9ToOP1)
+	bcall(_ChkFindSym)
+_memory_create_appvar_inRAM:
+	; de = ptr to beginning of heap
+	push de
+	ex de,hl
+	ld e,(hl)
+	inc hl
+	ld d,(hl) ; de = size
+	ld hl,-(_MEMORY_SIZE)
+	add hl,de
+	jr z,_memory_create_appvar_done
+_memory_delete_appvar:
+	ld hl,_memory_appvar_sym
+	bcall(_Mov9ToOP1)
+	bcall(_ChkFindSym)
+	bcall(_DelVar)
+	jr _memory_create_appvar_notfound
+_memory_create_appvar_done:
+	pop de
+	inc de
+	inc de
+	ret  ; de = pointer to beginning of appvar
+	
+_memory_create_appvar_notfound:
+	ld hl,_MEMORY_SIZE+2 ; for size bytes
+	bcall(_CreateAppVar)
+	inc de
+	inc de	
+	
+	
+_memory_initialize:
+	call _memory_create_appvar
+	ld (_memory_begin),hl
+	ld (_memory_free),hl
+	ld de,_MEMORY_SIZE
+	add hl,de
+	ld (_memory_end),hl
+	ld hl,_memory_flags
+	set _memory_init_f,(hl)
+	ret
+	
+	
+;; INPUTS: hl = size to allocate
+;; OUTPUTS: hl = pointer to memory
+_malloc:
+	ld a,(_memory_flags)
+	bit _memory_init_f,a
+	call z,_memory_create_appvar
+	
+	ld bc,(_memory_free)
+	add hl,bc ; hl = new free pointer
+	ex de,hl
+	ld hl,(_memory_end)
+	scf
+	ccf
+	sbc hl,de
+	jr c,_malloc_out_of_mem
+	
+	ex de,hl
+	ld (_memory_free),hl
+	ld h,b
+	ld l,c
+	ret
+	
+_malloc_out_of_mem:
+	ld hl,0
+	ld (curRow),hl
+	ld hl,_malloc_out_of_mem_msg
+	bcall(_PutS)
+	ld hl,0 ; null ptr
+	ret
+	
+	
+_memory_flags: .db 0
+_memory_init_f equ 0
+_memory_begin: .dw 0
+_memory_free:  .dw 0
+_memory_end:   .dw 0
+
+_malloc_out_of_mem_msg: .db "malloc: out of mem.",0
+
+_memory_appvar_sym:
+	.db AppVarObj
+	.db "COOL",0

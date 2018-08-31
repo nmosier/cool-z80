@@ -170,12 +170,21 @@ class StringEntry : public IndexedEntry<StringRef, std::string> {
   friend class SymbolTable<StringEntry>;
 };
 
+class Int16Entry: public IndexedEntry<int16_t, int16_t> {
+  private:
+   Int16Entry(IdType id, int16_t value): IndexedEntry(id, value) {}
+   friend class SymbolTable<Int16Entry>;
+};
+
+// not in use, as z80 is 8- and 16-bit
+/*
 class Int32Entry : public IndexedEntry<int32_t, int32_t> {
  private:
   Int32Entry(IdType id, int32_t value) : IndexedEntry(id, value) {}
 
   friend class SymbolTable<Int32Entry>;
 };
+*/
 
 // Symbols are StringEntry's in SymbolTable
 typedef StringEntry Symbol;
@@ -187,7 +196,8 @@ extern SymbolTable<Symbol>& gIdentTable;
 extern SymbolTable<StringEntry>& gStringTable;
 
 // Global table of integers (in integer literals)
-extern SymbolTable<Int32Entry>& gIntTable;
+// extern SymbolTable<Int32Entry>& gIntTable;
+extern SymbolTable<Int16Entry>& gIntTable;
 
 /// Initializer type for controlling static initialization of the SymbolTables using
 /// the "Nifty Counter Idiom"

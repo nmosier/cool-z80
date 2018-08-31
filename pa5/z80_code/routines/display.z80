@@ -1,0 +1,47 @@
+;; displays HL WITHOUT padding
+;; INPUT: hl
+;; OUTPUT: (none)
+;; DESTROYS: af,b,hl,de
+_MyDispHL:
+	push hl
+	ld de,_MyDispHL_scrap
+	ld b,5
+	bit 7,h
+	jr z,_MyDispHL_positive
+	ld a,h
+	cpl
+	ld h,a
+	ld a,l
+	cpl
+	ld l,a
+	inc hl
+	ld a,'-'
+	bcall(_PutC) ; if negative, display negative sign
+_MyDispHL_positive:
+	xor a
+_MyDispHL_zero:
+	ld (de),a
+	inc de
+	djnz _MyDispHL_zero
+	;; now main loop
+	ld b,0 ;; count # of digits
+_MyDispHL_loop:
+	bcall(_DivHLBy10)
+	add a,'0'
+	dec de
+	ld (de),a
+	inc b
+	;; cond
+	ld a,h
+	or l
+	jr nz,_MyDispHL_loop
+_MyDispHL_print:
+	ld a,(de)
+	bcall(_PutC)
+	inc de
+	djnz _MyDispHL_print
+	pop hl
+	ret
+
+_MyDispHL_scrap:
+	.db 0,0,0,0,0

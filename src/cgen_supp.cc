@@ -45,7 +45,7 @@ void ascii_mode(std::ostream& str)
 {
   if (!ascii) 
     {
-      str << "\t.ascii\t\"";
+      str << "\t.db\t\"";
       ascii = 1;
     } 
 }
@@ -75,7 +75,7 @@ void emit_string_constant(std::ostream& str, const char* s)
       break;
     case '\\':
       byte_mode(str);
-      str << "\t.byte\t" << (int) ((unsigned char) '\\') << std::endl;
+      str << "\t.db\t" << (int) ((unsigned char) '\\') << std::endl;
       break;
     case '"' :
       ascii_mode(str);
@@ -90,14 +90,14 @@ void emit_string_constant(std::ostream& str, const char* s)
       else 
 	{
 	  byte_mode(str);
-	  str << "\t.byte\t" << (int) ((unsigned char) *s) << std::endl;
+	  str << "\t.db\t" << (int) ((unsigned char) *s) << std::endl;
 	}
       break;
     }
     s++;
   }
   byte_mode(str);
-  str << "\t.byte\t0\t" << std::endl;
+  str << "\t.db\t0\t" << std::endl;
 }
 
 

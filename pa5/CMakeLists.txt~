@@ -7,6 +7,9 @@ set_source_files_properties(
     COMPILE_FLAGS -Wno-deprecated-register
 )
 
+add_custom_command(TARGET cgen
+    PRE_BUILD
+    COMMAND 
 
 add_executable(cgen
     cgen-main.cc

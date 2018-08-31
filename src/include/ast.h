@@ -528,8 +528,8 @@ class StringLiteral : public Expression {
 /// Cool integer literal
 class IntLiteral : public Expression {
  public:
-  static IntLiteral* Create(const Int32Entry* value, SourceLoc loc = 0);
-  static IntLiteral* Create(int32_t value, SourceLoc loc = 0);
+  static IntLiteral* Create(const Int16Entry* value, SourceLoc loc = 0);
+  static IntLiteral* Create(int16_t value, SourceLoc loc = 0);
 
   int32_t value() const { return value_->value(); }
 
@@ -538,9 +538,9 @@ class IntLiteral : public Expression {
   void DumpTree(std::ostream& os, size_t level, bool with_types) const override;
 
  protected:
-  const Int32Entry* value_;
+  const Int16Entry* value_;
 
-  IntLiteral(const Int32Entry* value, SourceLoc loc) : Expression(loc), value_(value) {}
+  IntLiteral(const Int16Entry* value, SourceLoc loc) : Expression(loc), value_(value) {}
 };
 
 /// Cool boolean literal

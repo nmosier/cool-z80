@@ -176,3 +176,21 @@ void cool::dump_cool_token(std::ostream& out, int lineno, int token, YYSTYPE yyl
   }
   out << std::endl;
 }
+
+template <typename T>
+int cool::etoi(T e) {
+	assert (sizeof(T) == sizeof(int));
+	return *((int*)&e);
+}
+
+template <typename T>
+bool operator==(const cool::unordered_pair<T>& lhs, const cool::unordered_pair<T>& rhs) {
+	if (lhs.first == rhs.first && lhs.second == rhs.second) return true;
+	if (lhs.first == rhs.second && lhs.second == rhs.first) return true;
+	return false;
+}
+
+template <class T>
+bool operator!=(const cool::unordered_pair<T>& lhs, const cool::unordered_pair<T>& rhs) {
+	return !(lhs == rhs);
+}

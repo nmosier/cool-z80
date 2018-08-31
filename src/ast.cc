@@ -400,11 +400,11 @@ void StringLiteral::DumpTree(std::ostream& os, size_t level, bool with_types) co
   DumpType(os, level, with_types);
 }
 
-IntLiteral* IntLiteral::Create(const Int32Entry* value, SourceLoc loc) {
+IntLiteral* IntLiteral::Create(const Int16Entry* value, SourceLoc loc) {
   return new IntLiteral(value, loc);
 }
 
-IntLiteral* IntLiteral::Create(int32_t value, SourceLoc loc) {
+IntLiteral* IntLiteral::Create(int16_t value, SourceLoc loc) {
   return Create(gIntTable.emplace(value), loc);
 }
 

@@ -1,0 +1,115 @@
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:852:11: warning: unused variable 'main' [-Wunused-variable]
+  Symbol* main    = gIdentTable.emplace(MAINNAME);
+          ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:1224:7: warning: unused variable 'temp_count' [-Wunused-variable]
+  int temp_count = body_->CalcTemps();
+      ^
+In file included from /Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:36:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/iostream:38:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/ios:216:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/__locale:15:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/string:470:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/string_view:169:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/__string:56:
+In file included from /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/algorithm:643:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/memory:1759:31: error: no matching constructor for initialization of 'std::__1::pair<cool::StringEntry *const, cool::AbsoluteAddress *>'
+            ::new((void*)__p) _Up(_VSTD::forward<_Args>(__args)...);
+                              ^   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/memory:1670:18: note: in instantiation of function template specialization 'std::__1::allocator<std::__1::__hash_node<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, void *> >::construct<std::__1::pair<cool::StringEntry *const, cool::AbsoluteAddress *>, cool::StringEntry *, cool::MemoryLocation &>' requested here
+            {__a.construct(__p, _VSTD::forward<_Args>(__args)...);}
+                 ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/memory:1516:14: note: in instantiation of function template specialization 'std::__1::allocator_traits<std::__1::allocator<std::__1::__hash_node<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, void *> > >::__construct<std::__1::pair<cool::StringEntry *const, cool::AbsoluteAddress *>, cool::StringEntry *, cool::MemoryLocation &>' requested here
+            {__construct(__has_construct<allocator_type, _Tp*, _Args...>(),
+             ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/__hash_table:2305:20: note: in instantiation of function template specialization 'std::__1::allocator_traits<std::__1::allocator<std::__1::__hash_node<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, void *> > >::construct<std::__1::pair<cool::StringEntry *const, cool::AbsoluteAddress *>, cool::StringEntry *, cool::MemoryLocation &>' requested here
+    __node_traits::construct(__na, _NodeTypes::__get_ptr(__h->__value_),
+                   ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/__hash_table:2021:29: note: in instantiation of function template specialization 'std::__1::__hash_table<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::__unordered_map_hasher<cool::StringEntry *, std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::hash<cool::StringEntry *>, true>, std::__1::__unordered_map_equal<cool::StringEntry *, std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::equal_to<cool::StringEntry *>, true>, std::__1::allocator<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *> > >::__construct_node_hash<cool::StringEntry *, cool::MemoryLocation &>' requested here
+        __node_holder __h = __construct_node_hash(__hash, _VSTD::forward<_Args>(__args)...);
+                            ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/__hash_table:1083:16: note: in instantiation of function template specialization 'std::__1::__hash_table<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::__unordered_map_hasher<cool::StringEntry *, std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::hash<cool::StringEntry *>, true>, std::__1::__unordered_map_equal<cool::StringEntry *, std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::equal_to<cool::StringEntry *>, true>, std::__1::allocator<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *> > >::__emplace_unique_key_args<cool::StringEntry *, cool::StringEntry *, cool::MemoryLocation &>' requested here
+        return __emplace_unique_key_args(__f, _VSTD::forward<_First>(__f),
+               ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/unordered_map:971:25: note: in instantiation of function template specialization 'std::__1::__hash_table<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::__unordered_map_hasher<cool::StringEntry *, std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::hash<cool::StringEntry *>, true>, std::__1::__unordered_map_equal<cool::StringEntry *, std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *>, std::__1::equal_to<cool::StringEntry *>, true>, std::__1::allocator<std::__1::__hash_value_type<cool::StringEntry *, cool::AbsoluteAddress *> > >::__emplace_unique<cool::StringEntry *, cool::MemoryLocation &>' requested here
+        return __table_.__emplace_unique(_VSTD::forward<_Args>(__args)...);
+                        ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:812:32: note: in instantiation of function template specialization 'std::__1::unordered_map<cool::StringEntry *, cool::AbsoluteAddress *, std::__1::hash<cool::StringEntry *>, std::__1::equal_to<cool::StringEntry *>, std::__1::allocator<std::__1::pair<cool::StringEntry *const, cool::AbsoluteAddress *> > >::emplace<cool::StringEntry *, cool::MemoryLocation &>' requested here
+            tables[klass()->name()].emplace(method->name(), offset);
+                                    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:422:5: note: candidate constructor not viable: no known conversion from 'cool::MemoryLocation' to 'cool::AbsoluteAddress *const' for 2nd argument
+    pair(_T1 const& __t1, _T2 const& __t2)
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:349:41: note: candidate template ignored: disabled by 'enable_if' [with _Dummy = true]
+    using _EnableB = typename enable_if<_Val, bool>::type;
+                                        ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:349:41: note: candidate template ignored: disabled by 'enable_if' [with _U1 = cool::StringEntry *, _U2 = cool::MemoryLocation &]
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:349:41: note: candidate template ignored: disabled by 'enable_if' [with _U1 = cool::StringEntry *, _U2 = cool::MemoryLocation &]
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:409:5: note: candidate constructor template not viable: requires 0 arguments, but 2 were provided
+    pair() : first(), second() {}
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:443:14: note: candidate constructor template not viable: requires single argument '__p', but 2 arguments were provided
+    explicit pair(pair<_U1, _U2> const& __p)
+             ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:450:5: note: candidate constructor template not viable: requires single argument '__p', but 2 arguments were provided
+    pair(pair<_U1, _U2> const& __p)
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:457:14: note: candidate constructor template not viable: requires single argument '__p', but 2 arguments were provided
+    explicit pair(pair<_U1, _U2>&&__p)
+             ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:464:5: note: candidate constructor template not viable: requires single argument '__p', but 2 arguments were provided
+    pair(pair<_U1, _U2>&& __p)
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:471:14: note: candidate constructor template not viable: requires single argument '__p', but 2 arguments were provided
+    explicit pair(_Tuple&& __p)
+             ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:479:5: note: candidate constructor template not viable: requires single argument '__p', but 2 arguments were provided
+    pair(_Tuple&& __p)
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:485:5: note: candidate constructor template not viable: requires 3 arguments, but 2 were provided
+    pair(piecewise_construct_t __pc,
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:542:9: note: candidate constructor template not viable: requires 5 arguments, but 2 were provided
+        pair(piecewise_construct_t,
+        ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:324:5: note: candidate constructor not viable: requires 1 argument, but 2 were provided
+    pair(pair const&) = default;
+    ^
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1/utility:325:5: note: candidate constructor not viable: requires 1 argument, but 2 were provided
+    pair(pair&&) = default;
+    ^
+In file included from /Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:39:
+In file included from /Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/cgen.h:42:
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:175:3: error: constructor for 'cool::ImmediateValue<unsigned short, short>' must explicitly initialize the const member 'imm_'
+  ImmediateValue(U imm) { assert (sizeof(T) == sizeof(U)); imm_ = *((T *) &imm); }
+  ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:1046:33: note: in instantiation of member function 'cool::ImmediateValue<unsigned short, short>::ImmediateValue' requested here
+        emit_load(RegisterValue(FP), Immediate16((int16_t) 0), os);
+                                     ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:181:11: note: declared here
+  const T imm_;
+          ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:175:65: error: cannot assign to non-static data member 'imm_' with const-qualified type 'const unsigned short'
+  ImmediateValue(U imm) { assert (sizeof(T) == sizeof(U)); imm_ = *((T *) &imm); }
+                                                           ~~~~ ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:181:11: note: non-static data member 'imm_' declared const here
+  const T imm_;
+  ~~~~~~~~^~~~
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:175:3: error: constructor for 'cool::ImmediateValue<unsigned char, signed char>' must explicitly initialize the const member 'imm_'
+  ImmediateValue(U imm) { assert (sizeof(T) == sizeof(U)); imm_ = *((T *) &imm); }
+  ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/cgen.cc:1367:19: note: in instantiation of member function 'cool::ImmediateValue<unsigned char, signed char>::ImmediateValue' requested here
+                emit_load(rE, Immediate8(static_cast<int8_t>(0)), os);
+                              ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:181:11: note: declared here
+  const T imm_;
+          ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:175:65: error: cannot assign to non-static data member 'imm_' with const-qualified type 'const unsigned char'
+  ImmediateValue(U imm) { assert (sizeof(T) == sizeof(U)); imm_ = *((T *) &imm); }
+                                                           ~~~~ ^
+/Users/nicholas/Projects/cool/csci433-f17-pa5-nmosier/src/include/register.h:181:11: note: non-static data member 'imm_' declared const here
+  const T imm_;
+  ~~~~~~~~^~~~
+2 warnings and 5 errors generated.
+make[2]: *** [src/CMakeFiles/cool_objs.dir/cgen.cc.o] Error 1
+make[1]: *** [src/CMakeFiles/cool_objs.dir/all] Error 2
+make: *** [all] Error 2

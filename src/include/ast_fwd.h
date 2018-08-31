@@ -74,6 +74,5 @@ class BoolLiteral;
 typedef std::size_t SourceLoc;
 
 /// Name of a register
-typedef char const* Register;
-constexpr Register kNullRegister = nullptr;
+class Register;
 }

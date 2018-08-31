@@ -7,6 +7,4 @@ add_library(cool_objs
     semant.cc
     cgen.cc
     cgen_supp.cc
-    register.cc
-    cgen_routines.cc
 )

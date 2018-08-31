@@ -1,0 +1,34 @@
+ACTIVATION RECORD:
+* arguments... (caller)
+* return address (caller, automatic)
+* frame pointer of caller (callee)
+* self pointer of caller (callee)
+note: caller is responsible for adding & removing all sections labeled 'caller', ditto for callee.
+
+## REGISTER USES ##
+iy => frame pointer (FP)
+ix => self pointer (SP)
+acc => self pointer upon member function entry
+
+
+
+THESE WERE PREVIOUSLY ALL GLOBALS:
+//   os << GLOBAL << CLASSNAMETAB << std::endl;
+//   os << GLOBAL; emit_protobj_ref(main, os);    os << std::endl;
+//   os << GLOBAL; emit_protobj_ref(integer, os); os << std::endl;
+//   os << GLOBAL; emit_protobj_ref(string, os);  os << std::endl;
+//   os << GLOBAL << BOOLCONST_PREFIX << 0 << std::endl;
+//   os << GLOBAL << BOOLCONST_PREFIX << 1 << std::endl;
+//   os << GLOBAL << INTTAG << std::endl;
+//   os << GLOBAL << BOOLTAG << std::endl;
+//   os << GLOBAL << STRINGTAG << std::endl;
+
+
+
+Object Layout
+$00 -- typeid (2)
+$02 -- object size (2)
+$03 -- dispatable address (2)
+.... object data
+
+*** need to implement Object.copy

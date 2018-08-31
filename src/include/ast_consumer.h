@@ -115,6 +115,9 @@ class InheritanceNode {
 };
 
 template<class Node>
+bool operator <= (const InheritanceNode<Node> *lhs, const InheritanceNode<Node> *rhs);
+
+template<class Node>
 class KlassTable {
  public:
   KlassTable() {
