@@ -3,6 +3,7 @@
 ;; OUTPUT: (none)
 ;; DESTROYS: af,b,hl,de
 _MyDispHL:
+	di
 	push hl
 	ld de,_MyDispHL_scrap
 	ld b,5
@@ -41,7 +42,36 @@ _MyDispHL_print:
 	inc de
 	djnz _MyDispHL_print
 	pop hl
+	ei
 	ret
 
 _MyDispHL_scrap:
 	.db 0,0,0,0,0
+	
+
+;;	inputs: hl = ptr to start of string
+;; destroys: hl
+_MyPutS:
+	di
+	
+	push bc
+	push af
+	ld a,(winBtm)
+	ld b,a
+_MyPutS1:
+	ld a,(hl)
+	inc hl
+	or a
+	scf
+	jr z,_MyPutS2
+	bcall(_PutC)
+	ld a,(curRow)
+	cp b
+	jr c,_MyPutS1
+_MyPutS2:
+	pop bc
+	ld a,b
+	pop bc
+	
+	ei
+	ret

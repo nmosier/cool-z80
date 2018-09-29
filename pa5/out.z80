@@ -370,7 +370,7 @@ Bool_protObj:
 	.dw	-1
 String_protObj:
 	.dw	4
-	.dw	5
+	.dw	5	
 	.dw	String_dispTab
 	.dw	int_const3
 	.dw	0

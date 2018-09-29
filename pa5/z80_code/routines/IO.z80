@@ -1,0 +1,263 @@
+IO.out_string:
+	pop bc ;return address
+	pop de
+	push de
+	push bc
+	; de = ptr to string
+	ex de,hl
+	ld bc,_string_objdata_offset
+	add hl,bc
+	call _MyPutS
+	ex de,hl
+	ret
+	
+IO.out_int:
+	pop bc
+	pop de
+	push de
+	push bc
+	push hl
+	ex de,hl
+	; hl = ptr to int
+	ld bc,_int_objdata_offset
+	add hl,bc
+	ld e,(hl)
+	inc hl
+	ld h,(hl)
+	ld l,e
+	call _MyDispHL
+	pop hl
+	ret
+	
+; this needs to use interrupts...
+; reads input until newline encountered
+
+IO.in_string:
+	ld a,_keyboard_newline
+	call IO.in_string.find_a
+	jr c,IO.in_string.found
+	jr IO.in_string ;; else, wait for input (loop)
+	
+IO.in_string.find_a:
+	ld hl,(_keyboard_buffer_buffered)
+	ld de,(_keyboard_buffer_start)
+	scf
+	ccf
+	sbc hl,de
+	
+	; test hl > 0
+	ret z ; if z, then nc
+	ccf
+	ret nc
+	
+	
+	ld b,h
+	ld c,l ; ld bc,hl
+	ex de,hl ; hl = (_keyboard_buffer_start)
+	;scf
+	cpir ; find newline character
+	ret z; c, success
+	ccf
+	ret ; nc, failure
+	
+IO.in_string.found:
+	; hl = pointer to (one past) first newline
+	scf
+	ccf
+	ld de,(_keyboard_buffer_start)
+	sbc hl,de
+		
+;	push hl ; remember length of string
+	ld de,_string_basesize
+	ex de,hl
+	add hl,de ; hl = size of string, inclusive of null terminator
+	push hl ; remember total size of string
+	push de ; remember length of string
+	call _malloc
+	
+	push hl ; pointer to new string object
+		
+	ex de,hl
+	ld hl,String_protObj
+	ld bc,_string_basesize
+	
+	ldir ; copy prototype object into first four fields
+		; de = ptr to beginning of string data field
+	pop hl ; pointer to new string object
+	pop bc ; length of string
+	push hl ; pointer to new string object
+	push bc ; length of string
+	dec bc
+	; bc = length of string data minus null terminator
+	ld hl,(_keyboard_buffer_start)
+	ld a,b
+	or c
+	jr z,_
+	ldir
+_	xor a ; ld a,0
+	ld (de),a
+	pop bc ; length of string
+		
+	ld hl,(_keyboard_buffer_start)
+	add hl,bc
+	
+	ld (_keyboard_buffer_start),hl ; update input buffer pointer
+	pop hl ; pointer to new string object
+	pop de ; total size of object
+	inc hl
+	inc hl
+	ld (hl),e
+	inc hl
+	ld (hl),d
+	dec hl
+	dec hl
+	dec hl
+	ret
+	
+
+; IO.in_int
+; INPUT: (none)
+; OUTPUT: returns int parsed from stdin
+IO.in_int:
+	; setup
+	ld hl,IO.in_int.flags
+	res IO.in_int.flags.neg,(hl)
+	; ---- find integer portion of string ---- ;
+	; 30 - 39 inclusive, thank god
+	ld de,(_keyboard_buffer_start)
+	ld hl,(_keyboard_buffer_buffered)
+	scf
+	ccf
+	sbc hl,de
+	ld a,h
+	or l
+	jr z,IO.in_int
+	
+	ex de,hl ; hl = (_keybord_buffer_start)
+	ld b,d
+	ld c,e
+	; bc = max # of chars to scan
+	
+	; scan until find character in {-, 0, ..., 9}
+IO.in_int.scan_pre:
+	ld a,(hl)
+	cp '-'
+	jr z,IO.in_int.scan_neg
+	cp '0'
+	jr c,IO.in_int.scan_skip
+	cp '9'+1
+	jr c,IO.in_int.scan
+
+IO.in_int.scan_skip:	
+	inc hl
+	dec bc
+	ld a,b
+	or c
+	jr nz,IO.in_int.scan_pre
+	; didn't find any nums
+	ld (_keyboard_buffer_start),hl ; consumed all input. Note hl = (_keyboard_buffer_buffered) now
+	jr IO.in_int
+	
+IO.in_int.scan_neg:
+	ld a,(IO.in_int.flags)
+	set IO.in_int.flags.neg,a
+	ld (IO.in_int.flags),a	
+	inc hl
+	dec bc
+	ld a,b
+	or c
+	jr z,IO.in_int	; if '-' is last buffered char, then retry
+IO.in_int.scan:
+	push hl ; s
+IO.in_int.scan_loop:
+	ld a,(hl)
+	inc hl
+	cp '0'
+	jr c,IO.in_int.scanned
+	cp '9'+1 
+	jr nc,IO.in_int.scanned
+	djnz IO.in_int.scan_loop
+	dec c
+	jr nz,IO.in_int.scan_loop
+IO.in_int.scanned:
+	;ex de,hl
+	;; top of stack: beginning of num
+	;; hl = (one past one past) end of num
+	pop de
+	push hl ; preserve end
+	push de ; preserve beginning
+	scf
+	sbc hl,de ; (one past end of num) - (beginning of num)
+	jr z,IO.in_int ; if num is 0 in length, continue checking
+	
+	; now calculate number
+	ld b,h
+	ld c,l ;; bc = num length
+	pop de ; de = beginning of #
+	ld hl,0 ; starting # is 0
+IO.in_int.calc_loop:
+	ld a,(de)
+	inc de
+	sub '0'
+IO.in_int.HLx10pA:
+	push de
+	add hl,hl ; *2
+	push hl
+	add hl,hl	; *4
+	add hl,hl	; *8
+	pop de
+	add hl,de	; hl*8 + hl*2
+	ld d,0
+	ld e,a
+	add hl,de	; 10*hl + a
+	pop de
+IO.in_int.calc_loop_end:
+	dec bc
+	ld a,b
+	or c
+	jr nz,IO.in_int.calc_loop
+	
+	ld a,(IO.in_int.flags)
+	bit IO.in_int.flags.neg,a
+	jr z,IO.in_int.sign_adjusted
+	;; negate hl
+	ld a,h
+	cpl
+	ld h,a
+	ld a,l
+	cpl
+	ld l,a
+	inc hl
+IO.in_int.sign_adjusted:
+	; make new obj
+	push hl
+	ld hl,_int_size
+	call _malloc
+	push hl
+	
+	ex de,hl
+	ld hl,Int_protObj
+	ld bc,_objdata_offset
+	ldir
+	ex de,hl
+	; hl points to int slot
+	pop de ; ptr to obj
+	pop bc
+	ld (hl),c
+	inc hl
+	ld (hl),b ; load in int
+
+	pop hl ; hl = (two past) end of #
+	dec hl
+	ld a,(hl)
+	cp _keyboard_newline
+	jr nz,_
+	inc hl	
+_	ld (_keyboard_buffer_start),hl
+	ex de,hl ; hl = ptr to new obj
+	ret
+
+	
+IO.in_int.flags: .db 0
+IO.in_int.flags.neg .equ 0
+	

@@ -1,0 +1,83 @@
+;; equality_test
+;; PARAMS:
+;;  * hl: object 1
+;;  * de: object 2
+;; DESC: tests whether obj1 & obj2 have same primitive type and value. Returns bool.
+;; NOTE: assumes that both ops are primitive types
+equality_test:
+	inc hl
+	inc hl
+	ld c,(hl)
+	inc hl
+	ld b,(hl)
+	dec hl
+	dec hl
+	dec hl
+	;; bc is size of hl
+equality_test.comploop:
+	ld a,(de)
+	cp (hl)
+	jr nz,equality_test.false
+	inc hl
+	inc de
+	dec bc
+	ld a,b
+	or c
+	jr nz,equality_test.comploop	
+equality_test.true:
+	ld hl,bool_const1
+	ret
+equality_test.false:
+	ld hl,bool_const0
+	ret
+	
+;; dispatch_abort
+;; PARAMS:
+;;  * hl: filename
+;;  * de: line no.	
+_dispatch_abort:
+	bcall(_NewLine)
+	push de
+	push hl
+	ld hl,_abort_msg
+	call _MyPutS
+	call IO.out_string
+	pop de
+	di
+	ld a,':'
+	bcall(_PutC)
+	ld a,' '
+	bcall(_PutC)
+	ei
+	call IO.out_int
+	bcall(_NewLine)
+	im 1
+_	jr -_ ; wait for ON to be pressed
+
+;; _case_abort
+;; PARAMS:
+;;  * hl: object that didn't match branches
+_case_abort:
+;; class_nameTab
+	ld e,(hl)
+	inc hl
+	ld d,(hl)
+	ld hl,class_nameTab
+	add hl,de
+	add hl,de
+	ld e,(hl)
+	inc hl
+	ld d,(hl)
+	ex de,hl
+	push hl
+	bcall(_NewLine)
+	ld hl,_abort_msg
+	call _MyPutS
+	call IO.out_string
+	pop de
+	bcall(_NewLine)
+
+_abort_msg:
+.db "abort_trap: ",0
+	
+_case_abort2:

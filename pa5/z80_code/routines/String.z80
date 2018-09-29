@@ -1,0 +1,219 @@
+;; String.z80
+;; contains all built-in routines for cool String object
+
+; preserves all regs
+String.length:
+	push de
+	inc hl
+	inc hl ; hl points to size field
+	ld e,(hl)
+	inc hl
+	ld d,(hl)
+	ex de,hl
+	ld de,_string_basesize
+	scf
+	sbc hl,de
+	pop de
+	ret
+	
+String.concat:
+	pop bc
+	pop de
+	push bc ; reorder stack: STACK: $ ret
+	
+	ex de,hl
+	ld b,h
+	ld c,l ; ld bc,hl
+	call String.length ; len(arg1)
+	push hl ; stack: $ ret arg1 len(arg1)
+	push bc
+	
+	ex de,hl
+	ld b,h
+	ld c,l
+	call String.length
+	push hl
+	push bc
+	; STACK: $ ret len(arg1) arg1 len(arg0) arg0
+	
+	add hl,de ; hl = summed length, minus obj size + null term
+	ld de,_string_basesize + 1
+	add hl,de ; hl = total new stirng size
+	push hl ; remember size for size bytes
+	
+	call _malloc
+	ld (String.concat.strobj),hl
+	ex de,hl
+	ld hl,String_protObj
+	ld bc,_string_basesize
+	ldir
+	
+	;; save size of string object
+	pop bc ; total size of str obj
+	ld hl,(String.concat.strobj)
+	inc hl
+	inc hl
+	ld (hl),c
+	inc hl
+	ld (hl),b
+	
+	pop hl
+	ld bc,_string_basesize
+	add hl,bc
+	pop bc
+	ld a,b
+	or c
+	jr z,_
+	ldir
+_	
+	pop hl
+	ld bc,_string_basesize
+	add hl,bc
+	pop bc
+	ld a,b
+	or c
+	jr z,_
+	ldir
+_	
+	xor a
+	ld (de),a
+	ld hl,(String.concat.strobj)
+	pop de
+	push hl
+	push de ; reorder stack again
+	ret
+	
+String.concat.strobj: .dw 0
+
+
+; String.substr
+; params:
+; * a0 = base string
+; * a1 = length (l)
+; * a2 = start (i)
+String.substr:
+	; STACK:
+	; $ start len ret base_str
+
+	push hl ; save base str
+	push ix
+	ld ix,0
+	add ix,sp ; ld ix,sp
+	
+	;; retrieve start int val
+	ld l,(ix+8)
+	ld h,(ix+9)
+	ld de,_int_objdata_offset
+	add hl,de
+	ld a,(hl)
+	ld (ix+8),a
+	ld c,a
+	inc hl
+	ld a,(hl)
+	ld (ix+9),a
+	ld b,a ; bc = start int val
+	bit 7,b ; test if bc neg
+	jr nz,String.substr.empty
+	
+	;; retrieve length int val
+	ld l,(ix+6)
+	ld h,(ix+7)
+	add hl,de
+	ld a,(hl)
+	ld (ix+6),a
+	inc hl
+	ld a,(hl)
+	ld (ix+7),a
+	bit 7,a ; test if len is neg
+	jr nz,String.substr.empty
+	
+	;; retrieve length of str
+	ld l,(ix+2)
+	ld h,(ix+3)
+	inc hl
+	inc hl ; size bytes
+	ld e,(hl)
+	inc hl
+	ld d,(hl)
+	ex de,hl
+	ld de,_string_basesize
+	scf
+	sbc hl,de ; hl = length of string (Not including null term)
+	;; note carry flag is reset (c)
+	sbc hl,bc ; hl = max length of substr
+	jr c,String.substr.empty
+	jr z,String.substr.empty
+
+	ld e,(ix+6)
+	ld d,(ix+7) ; de = requested length of substr
+	
+	;; cp hl,de
+	ld a,h
+	cp d
+	jr c,String.substr.adjusted ; if (h < d) then use hl
+	ld a,e
+	cp l
+	jr nc,String.substr.adjusted ; if (l ≤ e) then use hl
+	ex de,hl ; otherwise, use de
+String.substr.adjusted:
+	; hl = (char) length of new str
+	ld (ix+6),l
+	ld (ix+7),h ; save new length
+	
+	; test if hl == 0; if so, empty str
+	ld a,h
+	or l
+	jr z,String.substr.empty
+	
+	ld de,_string_basesize
+	scf
+	adc hl,de ; hl = size of new str obj
+	push hl ; remember for loading  size bytes later
+	call _malloc
+	; hl: ptr to str obj
+	;; intialize new objetc
+	ld bc,_string_basesize
+	ex de,hl
+	ld l,(ix+2)
+	ld h,(ix+3) ; base str obj
+	ld (ix+2),e
+	ld (ix+3),d ;; now str obj is new obj on stack
+	ldir
+	;; now get ptr to beginning of substr in base string
+	ld c,(ix+8)
+	ld b,(ix+9)
+	add hl,bc
+	ld c,(ix+6)
+	ld b,(ix+7)
+	ldir
+	xor a
+	ld (de),a
+	
+	pop de	; size bytes
+	pop ix ; preserved ix
+	pop hl ; ptr to beginning of str obj
+	inc hl
+	inc hl
+	ld (hl),e
+	inc hl
+	ld (hl),d
+	dec hl
+	dec hl
+	dec hl
+	ret
+	
+String.substr.empty:
+	;; string is empty
+	ld hl,_string_basesize + 1 ; +1 for null term
+	call _malloc
+	push hl ; save ptr
+	ld bc,_string_basesize
+	ld de,String_protObj
+	ex de,hl
+	ldir
+	xor a
+	ld (de),a
+	pop hl
+	pop ix
+	pop de
+	ret

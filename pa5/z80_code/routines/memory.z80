@@ -1,12 +1,128 @@
-;; routines.asm
-;; routines
-;;
-;; Created by Nicholas Mosier on 08/30/2018
+#define BREAK di \ halt \ ei
 
+#include "ti83plus.inc"
+#include "cool.inc"
 
- #include "ti83plus.inc"
  .org $9D93
  .db $BB,$6D ; AsmPrgm
+ 
+; main testing function
+main:
+	bcall(_ClrScrnFull)
+	
+	call _memory_initialize
+	
+	ld hl,0
+	ld (curRow),hl
+	call _keyboard_initialize
+		
+	call IO.in_string
+	push hl
+	
+	ld a,'='
+	di
+	bcall(_PutC)
+	ei
+	
+	call IO.in_string
+	pop de
+	
+	call equality_test
+	ld bc,_objdata_offset
+	add hl,bc
+	bit 7,(hl)
+	ld hl,str_true
+	jr nz,_
+	ld hl,str_false	
+_	push hl
+	call IO.out_string	
+	bcall(_NewLine)
+	
+	
+			
+	im 1	
+	
+	bcall(_GetKey)
+	bcall(_GetKey)
+		
+	ret
+	
+	
+	
+	
+_filename: .db "routines",0
+	
+;; test data
+String_protObj:
+	.dw	4
+	.dw	5
+	.dw	0
+	.dw	0
+	.dw	0
+
+str_true:
+	.dw 4
+	.dw 13
+	.dw 0
+	.dw 0
+	.db "true",0
+
+str_false:
+	.dw 4
+	.dw 14
+	.dw 0
+	.dw 0
+	.db "false",0
+
+str_start:
+	.dw 4
+	.dw 5
+	.dw 0
+	.dw 0
+	.db "start: ",0
+
+str_length:
+	.dw 4
+	.dw 5
+	.dw 0
+	.dw 0
+	.db "length: ",0
+
+str_const25:
+	.dw	4
+	.dw	7
+	.dw	0
+	.dw	0
+	.db	"Bool"
+	.db	0	
+	.dw	-1
+
+int_const17:
+	.dw	2
+	.dw	4
+	.dw	0
+	.dw	6000
+	
+	
+bool_const0:
+	.dw	3
+	.dw	7
+	.dw	0
+	.db	0
+
+bool_const1:
+	.dw	3
+	.dw	7
+	.dw	0
+	.db -1
+
+Int_protObj:
+	.dw	2
+	.dw	8
+	.dw	-1
+	.dw	0
+	
+
 
 ;;; EQUATES ;;;
 _MEMORY_SIZE equ $2000 ; 8 KB
@@ -53,10 +169,11 @@ _memory_create_appvar_notfound:
 	bcall(_CreateAppVar)
 	inc de
 	inc de	
-	
+	ret
 	
 _memory_initialize:
 	call _memory_create_appvar
+	ex de,hl
 	ld (_memory_begin),hl
 	ld (_memory_free),hl
 	ld de,_MEMORY_SIZE
@@ -72,7 +189,10 @@ _memory_initialize:
 _malloc:
 	ld a,(_memory_flags)
 	bit _memory_init_f,a
+	
+	push hl
 	call z,_memory_create_appvar
+	pop hl
 	
 	ld bc,(_memory_free)
 	add hl,bc ; hl = new free pointer
@@ -87,6 +207,7 @@ _malloc:
 	ld (_memory_free),hl
 	ld h,b
 	ld l,c
+	
 	ret
 	
 _malloc_out_of_mem:
@@ -95,6 +216,9 @@ _malloc_out_of_mem:
 	ld hl,_malloc_out_of_mem_msg
 	bcall(_PutS)
 	ld hl,0 ; null ptr
+	
+	;BREAK
+	
 	ret
 	
 	
@@ -113,46 +237,8 @@ _memory_appvar_sym:
 ;;;;;;; IO routines ;;;;;;;;
 
 #include "display.z80"
-
-; input: arg1 = string to print
-; output: (none)
-; preserves hl
-#define _string_objdata_offset 2*4
-IO.out_string:
-	pop bc ;return address
-	pop de
-	push de
-	push bc
-	; de = ptr to string
-	ex de,hl
-	ld bc,_string_objdata_offset
-	add hl,bc
-	bcall(_PutS)
-	ex de,hl
-	ret
+#include "keyboard.z80"
+#include "IO.z80"
+#include "String.z80"
 	
-#define _int_objdata_offset 2*3
-IO.out_int:
-	pop bc
-	pop de
-	push de
-	push bc
-	push hl
-	ex de,hl
-	; hl = ptr to int
-	ld bc,_int_objdata_offset
-	add hl,bc
-	ld e,(hl)
-	inc hl
-	ld h,(hl)
-	ld l,e
-	bcall(_MyDispHL)
-	pop hl
-	ret
-	
-; this needs to use interrupts...
-
-#define _input_buffer appBackUpScreen
-IO.in_string:
-	
-	
+#include "misc.z80"

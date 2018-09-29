@@ -111,6 +111,6 @@ template <typename T>
 bool operator==(const unordered_pair<T>& lhs, const unordered_pair<T>& rhs);
 
 template <typename T>
-bool operator!=(const unordered_pair<T>& lhs, const unordered_pair<T>& rhs);
+bool operator!=(const unordered_pair<T>& lhs, const unordered_pair<T>4& rhs);
 
 } // namespace cool

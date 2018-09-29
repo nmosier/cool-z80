@@ -1,7 +1,6 @@
 #define _interrupt_hook $9A9A
 #define _keyboard_buffer saveSScreen
 #define _keyboard_buffer_end saveSScreen+768
-#define _keyboard_newline $FF
 
 _keyboard_initialize:
 	di
@@ -13,29 +12,72 @@ _keyboard_initialize:
 	ldir
 	; copy interrupt to $99xx
 	
+	ld hl,_keyboard_interrupt_jump
+	ld de,$9A9A
+	ld bc,_keyboard_interrupt_jump_end - _keyboard_interrupt_jump
+	ldir
+	
 	ld hl,_keyboard_buffer
 	ld (_keyboard_buffer_start),hl
 	ld (_keyboard_buffer_buffered),hl
 	ld (_keyboard_buffer_input),hl
+	
+	ld a,$FF
+	ld hl,_keyboard_flags   ; alpha lock on
+	set _keyboard_flag_alock,(hl)
+	
+	ld a,$99
+	ld i,a ; set interrupt vector high byte
 	im 2
+	ei
 	ret
+	
+_keyboard_interrupt_jump:
+	jp _keyboard_interrupt
+_keyboard_interrupt_jump_end:
 
 _keyboard_interrupt:
 	ex af,af'
 	exx
+
+	call GetCloneSC
 	
-	bcall(_GetCSC)
+	; check if out of bounds
+	cp 1
+	jr c,_keyboard_interrupt_done
+	cp (38+1)*2
+	jr nc,_keyboard_interrupt_done
 	
-	or a
-	jr z,_keyboard_interrupt_done
+	cp skAlpha
+	jr z,_keyboard_interrupt_alpha
 	
+	cp sk2nd
+	jr z,_keyboard_interrupt_2nd
+	
+	cp skEnter
+	jr z,_keyboard_interrupt_newline
+	
+	
+	ld hl,_keyboard_flags
+	ld b,0
+	bit _keyboard_flag_shift,(hl)
+	jr z,_
+	inc b
+_	bit _keyboard_flag_alock,(hl)
+	jr z,_
+	inc b
+_	bit 0,b
+	res _keyboard_flag_shift,(hl) ; shift only holds for one keypress
 	ld hl,_keyboard_key_LUT
-	ld e,a
+	jr z,_
+	inc hl
+_	sla a
 	ld d,0
+	ld e,a
 	add hl,de
 	ld a,(hl)
 	
-	or a	;; unsupported key
+	or a	;; cp 0, unsupported key
 	jr z,_keyboard_interrupt_done
 	
 	ld hl,(_keyboard_buffer_input)
@@ -43,16 +85,39 @@ _keyboard_interrupt:
 	inc hl
 	ld (_keyboard_buffer_input),hl
 	
-	cp $FF
-	jr nz,_keyboard_interrupt_done
-	; enter pressed
-	ld (_keyboard_buffer_buffered),hl ; update buffered marker
+	;call _keyboard_interrupt_print	
+	bcall(_PutC)
 	
 _keyboard_interrupt_done:
 	exx
 	ex af,af'
-	ei
-	ret
+	jp	$0038 ;; run normal interrupt routine
+	
+_keyboard_interrupt_newline:
+	ld hl,(_keyboard_buffer_input)
+	ld (hl),_keyboard_newline
+	inc hl
+	ld (_keyboard_buffer_buffered),hl ; update buffered marker
+	ld (_keyboard_buffer_input),hl
+	bcall(_NewLine)
+	jr _keyboard_interrupt_done
+
+_keyboard_interrupt_alpha:
+	ld hl,_keyboard_flags
+	bit _keyboard_flag_alock,(hl)
+	set _keyboard_flag_alock,(hl)
+	jr z,_keyboard_interrupt_done
+	res _keyboard_flag_alock,(hl)
+	jr _keyboard_interrupt_done
+
+_keyboard_interrupt_2nd:
+	ld hl,_keyboard_flags
+	bit _keyboard_flag_shift,(hl)
+	set _keyboard_flag_shift,(hl)
+	jr z,_keyboard_interrupt_done
+	res _keyboard_flag_shift,(hl)
+	jr _keyboard_interrupt_done
+
 _keyboard_interrupt_end:
 	
 
@@ -60,65 +125,165 @@ _keyboard_buffer_start: .dw 0		; beginning of unread input
 _keyboard_buffer_buffered: .dw 0	; (one past) end of buffered input
 _keyboard_buffer_input: .dw 0		; (one past) end of unbuffered input
 
+_keyboard_debug_status:
+	;; print status of buffer
+	di
+	bcall(_ClrScrnFull)
+	ei
+	ld hl,0
+	ld (curRow),hl
+	
+	ld hl,_keyboard_debug_start
+	call _MyPutS
+	ld hl,(_keyboard_buffer_starT)
+	call _MyDispHL
+	ld hl,_keyboard_debug_buffered
+	call _MyPutS
+	ld hl,(_keyboard_buffer_buffered)
+	call _MyDispHL
+	ld hl,_keyboard_debug_input
+	call _MyPutS
+	ld hl,(_keyboard_buffer_input)
+	call _MyDispHL
+	
+	ret
+	
+_keyboard_debug_start: .db "start: ",0
+_keyboard_debug_buffered: .db "buffered: ",0
+_keyboard_debug_input: .db "input: ",0
+
+
 _keyboard_key_LUT:
 ;character    ;key hex    ;keypress name
- .db 0        ;00        none
- .db 0        ;01        skDown
- .db 0        ;02        skLeft
- .db 0        ;03        skRight
- .db 0        ;04        skUp
- .db 0        ;05        none
- .db 0        ;06        none
- .db 0        ;07        none
- .db 0        ;08        none
- .db _keyboard_newline        ;09        skEnter
- .db '"'        ;0A        skAdd
- .db 'W'        ;0B        skSub
- .db 'R'        ;0C        skMul
- .db 'M'        ;0D        skDiv
- .db 'H'        ;0E        skPower
- .db 0        ;0F        skClear
+ .db 0,0        ;00        none
+ .db 0,0       ;01        skDown
+ .db 0,0       ;02        skLeft
+ .db 0,0       ;03        skRight
+ .db 0,0       ;04        skUp
+ .db 0,0      ;05        none
+ .db 0,0       ;06        none
+ .db 0,0        ;07        none
+ .db 0,0        ;08        none
+ .db _keyboard_newline, _keyboard_newline        ;09        skEnter
+ .db '+','"'        ;0A        skAdd
+ .db '-','W'        ;0B        skSub
+ .db '*','R'        ;0C        skMul
+ .db '/','M'        ;0D        skDiv
+ .db '^','H'        ;0E        skPower
+ .db 0,0       ;0F        skClear
+ .db 0,0   			;10 none
+ .db '-','?'        ;11        skChs
+ .db '3',$5B        ;12        sk3
+ .db '6','V'        ;13        sk6
+ .db '9','Q'        ;14        sk9
+ .db ')','L'        ;15        skRParen
+ .db 0,'G'        ;16        skTan
+ .db 0,0        ;17        skVars
+ .db 0,0        ;18        none
+ .db '.',':'        ;19        skDecPnt
+ .db '2','Z'        ;1A        sk2
+ .db '5','U'        ;1B        sk5
+ .db '8','P'        ;1C        sk8
+ .db '(','K'        ;1D        skLParen
+ .db 0,'F'        ;1E        skCos
+ .db 0,'C'        ;1F        skPrgm
 
- .db '?'        ;10        skChs
- .db 0        ;11        none
- .db $5B        ;12        sk3
- .db 'V'        ;13        sk6
- .db 'Q'        ;14        sk9
- .db 'L'        ;15        skRParen
- .db 'G'        ;16        skTan
- .db 0        ;17        skVars
- .db 0        ;18        none
- .db ':'        ;19        skDecPnt
- .db 'Z'        ;1A        sk2
- .db 'U'        ;1B        sk5
- .db 'P'        ;1C        sk8
- .db 'K'        ;1D        skLParen
- .db 'F'        ;1E        skCos
- .db 'C'        ;1F        skPrgm
+ .db 0,0        ;20        skStat
+ .db '0',' '        ;21        sk0
+ .db '1','Y'        ;22        sk1
+ .db '4','T'        ;23        sk4
+ .db '7','O'        ;24        sk7
+ .db ',','J'        ;25        skComma
+ .db 0,'E'        ;26        skSin
+ .db 0,'B'        ;27        skMatrix
+ .db 0,'X'        ;28        skGraphVar
+ .db 0,0        ;29        none
+ .db '>','X'        ;2A        skSto
+ .db 0,'S'        ;2B        skLn
+ .db 0,'N'        ;2C        skLog
+ .db 0,'I'        ;2D        skSquare
+ .db 0,'D'        ;2E        skRecip
+ .db 0,'A'        ;2F        skMath
 
- .db 0        ;20        skStat
- .db ' '        ;21        sk0
- .db 'Y'        ;22        sk1
- .db 'T'        ;23        sk4
- .db 'O'        ;24        sk7
- .db ','        ;25        skComma
- .db 'E'        ;26        skSin
- .db 'B'        ;27        skMatrix
- .db 'X'        ;28        skGraphVar
- .db 0        ;29        none
- .db 'X'        ;2A        skSto
- .db 'S'        ;2B        skLn
- .db 'N'        ;2C        skLog
- .db 'I'        ;2D        skSquare
- .db 'D'        ;2E        skRecip
- .db 'A'        ;2F        skMath
+ .db 0,0        ;30        skAlpha
+ .db 0,0        ;31        skGraph
+ .db 0,0       ;32        skTrace
+ .db 0,0        ;33        skZoom
+ .db 0,0        ;34        skWindow
+ .db 0,0        ;35        skYEqu
+ .db 0,0        ;36        sk2nd
+ .db 0,0        ;37        skMode
+ .db 0,0        ;38        skDel
+ 
+_keyboard_flags: .db 0
+#define _keyboard_flag_alock 0
+#define _keyboard_flag_shift 1	; note alock and shift are mutually exclusive
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ ;====== GetCSC clone ===========================================================
+; This routine is a replacement for the GetCSC bcall.  Its returns are the same.
+; Inputs:
+;  - None
+; Outputs:
+;  - A: Keycode
+; Destroys:
+;  - AF, BC
 
- .db 0        ;30        skAlpha
- .db 0        ;31        skGraph
- .db 0        ;32        skTrace
- .db 0        ;33        skZoom
- .db 0        ;34        skWindow
- .db 0        ;35        skYEqu
- .db 0        ;36        sk2nd
- .db 0        ;37        skMode
- .db 0        ;38        skDel
+; To do: Add debouncing
+
+GetCloneSC:
+;	push bc			; uncomment for preserving bc
+		ld	c, 0BFh
+		ld	b, 7
+getCSCloop:
+		ld	a, c
+		out	(1), a
+		nop
+		nop
+		nop
+		rrca
+		ld	c, a
+		in	a, (1)
+		cp	0ffh
+		jr	nz, getCSCgotCSC
+		djnz	getCSCloop
+		xor	a
+		ld	(lastKey), a
+;	pop bc
+	ret
+getCSCgotCSC:
+		dec	b
+		ld	c, b
+		call	getResetBit
+		ld	a, b
+		sla	c
+		sla	c
+		sla	c
+		add	a, c
+		ld	b, a		; This dance ensures that
+		ld	a, (lastKey)	; the keycode is returned in A
+		ld	c, a
+		ld	a, b
+		cp	c
+		ld	(lastKey), a
+		jr	nz, getCSCgoodCSC
+		xor	a
+getCSCgoodCSC:
+;	pop bc
+	ret
+			
+getResetBit:
+	cp	$FF
+	ret	z
+	ld	b, 0
+getResetBitLoop:
+	rrca
+	inc	b
+	jr	c, getResetBitLoop
+	ret
+lastKey: .db 0
