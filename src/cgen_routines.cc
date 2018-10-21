@@ -138,7 +138,7 @@ const Routine Object_Copy("Object.copy", [](const std::string& label, std::ostre
   0x28, 0x5f, 0x4d, 0x79, 0x50, 0x75, 0x74, 0x53, 0x29, 0x0a, 0x09, 0x65,
   0x78, 0x20, 0x64, 0x65, 0x2c, 0x68, 0x6c, 0x0a };
 
-const Routine IO_out_string("IO.out_string", [](const std::string& label, std::string& os) {
+const Routine IO_out_string("IO.out_string", [](const std::string& label, std::ostream& os) {
 
   
   os << std::string(reinterpret_cast<char *>(body)) << std::endl;

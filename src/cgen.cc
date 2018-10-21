@@ -1309,8 +1309,11 @@ void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   int temporary_offset = varEnv.GetTemporaryMaxCount() * WORD_SIZE;
   
   // pop entire AR off stack, NOT INCLUDING return addr. & arguments from caller
-  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>((temporary_offset - CgenLayout::ActivationRecord::callee_add_size)*WORD_SIZE)), os);
+  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temporary_offset * WORD_SIZE)), os);
   emit_add(rHL, RegisterValue(SP), os);
+  emit_load(RegisterValue(SP), RegisterValue(rHL), os);
+  emit_pop(SELF, os);
+  emit_pop(FP, os);
   
   emit_return(Flags::none, os);
   
@@ -1424,9 +1427,11 @@ void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   		// fast multiplication algorithm
   		emit_load(rC, rH, os); // save high byte
   		emit_load(ACC, rL, os);
-  		AbsoluteAddress mul_de_a(Routine::find("MUL_DE_A")->ref());
+  		// AbsoluteAddress mul_de_a(Routine::find("MUL_DE_A")->ref());
+  		AbsoluteAddress mul_de_a("_MUL_DE_A");
   		emit_call(mul_de_a, nullptr, os); // result in HL
-  		AbsoluteAddress mul_c_d(Routine::find("MUL_C_D")->ref());
+//  		AbsoluteAddress mul_c_d(Routine::find("MUL_C_D")->ref());
+  		AbsoluteAddress mul_c_d("_MUL_C_D");
   		emit_call(mul_c_d, nullptr, os);
   		emit_load(rD, rA, os);
   		emit_load(rE, Immediate8(static_cast<int8_t>(0)), os);
