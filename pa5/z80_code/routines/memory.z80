@@ -6,15 +6,20 @@
  .org $9D93
  .db $BB,$6D ; AsmPrgm
  
+ 
+#include "boot.z80"
+ 
+ 
+
 ; main testing function
 main:
 	bcall(_ClrScrnFull)
-	
 	call _memory_initialize
-	
 	ld hl,0
 	ld (curRow),hl
 	call _keyboard_initialize
+		
+		
 		
 	call IO.in_string
 	push hl
@@ -47,6 +52,18 @@ _	push hl
 		
 	ret
 	
+	
+
+
+	
+class_nameTab:
+	.dw str_true
+	.dw	str_true
+	.dw	str_true
+	.dw	str_true
+	.dw	str_true
+	.dw	str_true
+	.dw	str_true
 	
 	
 	
@@ -238,7 +255,8 @@ _memory_appvar_sym:
 
 #include "display.z80"
 #include "keyboard.z80"
+#include "Object.z80"
 #include "IO.z80"
 #include "String.z80"
-	
+#include "math.z80"
 #include "misc.z80"

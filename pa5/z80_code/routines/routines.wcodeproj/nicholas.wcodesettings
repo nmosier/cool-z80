@@ -70,7 +70,9 @@
 		<string>3</string>
 	</array>
 	<key>ProjectGroupsOutlineViewSelectedItemIndexPaths</key>
-	<array/>
+	<array>
+		<string>0,0</string>
+	</array>
 	<key>ProjectGroupsOutlineViewWidth</key>
 	<real>125</real>
 	<key>ProjectOpenTextFileNames</key>
@@ -83,9 +85,10 @@
 		<string>String.z80</string>
 		<string>cool.inc</string>
 		<string>misc.z80</string>
+		<string>boot.z80</string>
 	</array>
 	<key>ProjectSelectedTextFileName</key>
-	<string>misc.z80</string>
+	<string>memory.z80</string>
 	<key>ProjectSymbolsTableViewAutosaveDictionary</key>
 	<dict>
 		<key>Icon</key>

@@ -43,16 +43,10 @@ _dispatch_abort:
 	call _MyPutS
 	call IO.out_string
 	pop de
-	di
-	ld a,':'
-	bcall(_PutC)
-	ld a,' '
-	bcall(_PutC)
-	ei
+	ld hl,_abort_sep
+	call _MyPutS
 	call IO.out_int
-	bcall(_NewLine)
-	im 1
-_	jr -_ ; wait for ON to be pressed
+	jp _abort_wait
 
 ;; _case_abort
 ;; PARAMS:
@@ -73,11 +67,34 @@ _case_abort:
 	bcall(_NewLine)
 	ld hl,_abort_msg
 	call _MyPutS
+	ld hl,_abort_sep
+	call _MyPutS
 	call IO.out_string
-	pop de
-	bcall(_NewLine)
+	jp _abort_wait
 
 _abort_msg:
 .db "abort_trap: ",0
+_abort_sep: .db ": ",0
 	
+	
+;; _case_abort2
+;; * hl: filename
+;; * de: linenum
 _case_abort2:
+	push de
+	push hl
+	ld hl,_abort_msg
+	bcall(_NewLine)
+	call _MyPutS
+	call IO.out_string
+	pop de
+	pop hl
+	call _MyDispHL
+	jp _abort_wait
+	
+_abort_wait:
+	bcall(_NewLine)
+	im 1
+_	jr -_ ; wait for ON to be pressed
+	
+	
