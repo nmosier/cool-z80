@@ -90,11 +90,14 @@ limitations under the License.
 #define INT_SLOTS         1
 #define BOOL_SLOTS        1
 
-// #define GLOBAL        "\t.globl\t"
-// #define ALIGN         "\t.align\t2\n"
-// #define WORD          "\t.word\t"
+// DIRECTIVES
 #define DW            "\t.dw\t"
 #define DB            "\t.db\t"
+
+#define BREAK		  "\tBREAK"
+
+// PREPROCESSOR
+#define INCLUDE	"#include\t"
 
 //
 // register names

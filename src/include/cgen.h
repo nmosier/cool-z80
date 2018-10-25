@@ -33,6 +33,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#ifndef __CGEN_H
+#define __CGEN_H
+
 #include <assert.h>
 #include <stdio.h>
 #include "emit.h"
@@ -71,9 +74,10 @@ extern bool gCgenDebug;
 struct CgenLayout {
 	struct ActivationRecord {
 		static const int8_t callee_add_size = -2 * WORD_SIZE;
-		static const int8_t caller_self_offset = 0;
+		static const int8_t caller_self_offset = 0 * WORD_SIZE;
 		static const int8_t caller_frame_offset = 1 * WORD_SIZE;
-		static const int8_t arguments_end = 2 * WORD_SIZE; // one past end
+		static const int8_t return_value = 2 * WORD_SIZE;
+		static const int8_t arguments_end = 3 * WORD_SIZE; // one past end
 	};
 	
 	struct Object {
@@ -85,13 +89,6 @@ struct CgenLayout {
 	};
 };
 
-// #define CgenObjectLayout_AttributeOffset 3	// in words (not bytes)
-// 
-// #define CgenARLayout_BaseSize 2 // # of constant fields in each AR (excludes actuals + return address)
-// #define CgenARLayout_FPOffset 1 // from callee's FP
-// #define CgenARLayout_SelfPOffset 0 // from callee's FP
-//#define CgenARLayout_RAOffset 0 // from callee's FP
-
 /**
  * Main entry point for code generation
  * @param program Program AST node
@@ -102,50 +99,6 @@ void Cgen(Program* program, std::ostream& os);
 // Forward declarations
 class CgenKlassTable;
 
-
-// class MemoryLocation {
-//  public:
-//   MemoryLocation(int offset): offset_(offset) {}
-//   virtual ~MemoryLocation() {}
-//   
-//   int offset() { return offset_; }
-// 
-//   virtual bool isindirect() { return false; }
-//   virtual bool isabsolute() { return false; }
-//   virtual void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) {}
-//   virtual void emit_load_from_loc(const char* dest_reg, std::ostream& s) {}
-//   virtual void emit_store_to_loc(const char* src_reg, std::ostream& s) {}
-// private:
-//   int offset_;
-// };
-// 
-// class IndirectLocation : public MemoryLocation {
-//  public:
-//   IndirectLocation(int offset, const char* base_reg): MemoryLocation(offset), base_reg_(base_reg) {}
-//   
-//   const char* base_reg() { return base_reg_; }
-//   bool isindirect() override { return true; }
-//   void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
-//   void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
-//   void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
-//  private:
-//   const char* base_reg_;
-// };
-// 
-// class AbsoluteLocation : public MemoryLocation {
-//  public:
-//   AbsoluteLocation(int offset, std::string label): MemoryLocation(offset), label_(label) {}
-//   
-//   std::string label() { return label_; }
-//   bool isabsolute() override { return true; }
-//   void emit_store_address_to_loc(const char* dest_reg, std::ostream& s) override;
-//   void emit_load_from_loc(const char* dest_reg, std::ostream& s) override;
-//   void emit_store_to_loc(const char* src_reg, std::ostream& s) override;
-//  private:
-//   std::string label_;
-// };
-
-// typedef std::unordered_map<Symbol*,AbsoluteAddress*> DispatchTable;
 class DispatchTable;
 typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
 
@@ -260,19 +213,6 @@ class CgenKlassTable : public KlassTable<CgenNode> {
     return node->tag_;
   }
   
-//   
-//    * Returns whether two nodes inherit from one another
-//    * Note: strictly less than ( < ) relationship
-//    */
-//   bool InheritsFrom(CgenNode* child, CgenNode* parent) {
-//     bool isparent = true;
-//     while (child != parent && child != root()) {
-//       child = child->parent();
-//       isparent = false;
-//     }
-//     return !isparent && child == parent;
-//   }
-  
   std::pair<bool,int> InheritanceDistance(const CgenNode* node1, const CgenNode* node2) const;
 
 	std::map<std::size_t, const CgenNode *> GetTags() const;
@@ -298,7 +238,7 @@ class CgenKlassTable : public KlassTable<CgenNode> {
    * Emit code to select the GC mode
    * @param os std::ostream to write generated code to
    */
-  void CgenSelectGC(std::ostream& os) const;
+//   void CgenSelectGC(std::ostream& os) const;
 
   /**
    * Emit constants (literals)
@@ -352,3 +292,5 @@ class CgenKlassTable : public KlassTable<CgenNode> {
 
 
 } // namespace cool
+
+#endif

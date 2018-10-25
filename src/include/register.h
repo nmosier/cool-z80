@@ -139,7 +139,7 @@ class RegisterPointer: public MemoryLocation {
 
 class RegisterPointerOffset: public RegisterPointer {
  public:
-  RegisterPointerOffset(const Register16X& reg, int8_t offset): RegisterPointer(reg), reg_(reg), offset_(offset) {}
+  RegisterPointerOffset(const Register16X& reg, uint8_t offset): RegisterPointer(reg), reg_(reg), offset_(offset) {}
   RegisterPointerOffset(const RegisterPointerOffset& old):  RegisterPointer(old.reg()), reg_(old.reg()), offset_(old.offset()) {}
   ~RegisterPointerOffset() {}
   std::ostream& print(std::ostream& os) const override;
@@ -147,11 +147,11 @@ class RegisterPointerOffset: public RegisterPointer {
   Kind kind() const override { return PTR_OFF; }
   const Register16X& reg() const { return reg_; }
   int8_t offset() const { return offset_; }
-  RegisterPointerOffset &advanced(int8_t d) const;
-  MemoryLocation &operator[](int d) const override { assert (((int8_t) d) == d); return advanced((int8_t) d); }
+  RegisterPointerOffset &advanced(uint8_t d) const;
+  MemoryLocation &operator[](int d) const override { assert (((uint8_t) d) == d); return advanced((uint8_t) d); }
  private:
   const Register16X& reg_;
-  const int8_t offset_;
+  const uint8_t offset_;
 };
 
 // values
