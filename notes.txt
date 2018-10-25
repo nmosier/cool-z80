@@ -32,3 +32,11 @@ $03 -- dispatable address (2)
 .... object data
 
 *** need to implement Object.copy
+
+
+
+
+--------------
+DEBUGGING
+** something weird is going on with Printer.print()
+** object addresses either not being initialized correctly or loaded in the Binop codegen
