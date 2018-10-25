@@ -1,45 +1,56 @@
 ; math.z80
 ; contains all cool math routines
 
-_MUL_DE_A:
-	ld	hl,0
-	ld	b,8
-_MUL_DE_A_loop:
-	add	hl,hl
-	rlca
-	jr	nc,_MUL_DE_A_skip
-	add	hl,de
-_MUL_DE_A_skip:
-	djnz	_MUL_DE_A_loop
-	ret	
-_MUL_C_D:
-	xor	a
-	ld	b,8
-_MUL_C_D_loop:
-	add	a,a
-	jr	nc,_MUL_C_D_skip
-_MUL_C_D_skip:
-	djnz	_MUL_C_D_loop
-	ret	
-
-_DIV_HL_D:
-	xor	a
-	ld	b,16
-_DIV_HL_D_loop:
-	add	hl,hl
-	rla
-	jr	c,_DIV_HL_D_skip
-_DIV_HL_D_overflow:
-	sub	d
-	inc	l
-_DIV_HL_D_skip:
-	djnz	_DIV_HL_D_loop
-	ret	
+; also works if numbers signed!
+_MUL_HL_DE:
+	ld bc,0
+	push bc ; top of stack stores accumulator
+	xor a
+	ld b,16
+_MUL_HL_DE.loop:
+	add hl,hl
+	ex (sp),hl
+	jr nc,_MUL_HL_DE.loop.skip
+	add hl,hl
+	add hl,de
+	ex (sp),hl
+	djnz _MUL_HL_DE.loop
+	jr _MUL_HL_DE.done
+_MUL_HL_DE.loop.skip:
+	add hl,hl
+	ex (sp),hl
+	djnz _MUL_HL_DE.loop
+_MUL_HL_DE.done:
+	pop hl ; restore result
+	ret
 
 _DIV_HL_DE:
+	xor a ; initialize A to store sign
+_DIV_HL_DE.fix_sign_hl:
+	bit 7,h
+	jr z,_DIV_HL_DE.fix_sign_de
+	; negate hl
+	ld b,h
+	ld c,l ; ld bc,hl
+	ld hl,0
+	sbc hl,bc ; carry reset, so -hl -> hl
+	xor 1 ; update sign bit in A
+_DIV_HL_DE.fix_sign_de:
+	bit 7,d
+	jr z,_DIV_HL_DE.fixed_signs
+	; negate de
+	ex de,hl
+	ld b,h
+	ld c,l
+	ld hl,0
+	sbc hl,bc
+	ex de,hl
+	xor 1 ; update sign bit of answer
+_DIV_HL_DE.fixed_signs:
+	push af ; save sign bit
+	ld bc,0
+	push bc ; initialize accumulator on stack
 	xor	a
-	ld	bc,0
-	push	bc
 	ld	b,16
 _DIV_HL_DE_loop:
 	add	hl,hl
@@ -54,14 +65,21 @@ _DIV_HL_DE_loop:
 	cp	e
 	jr	c,_DIV_HL_DE_skip
 _DIV_HL_DE_overflow:
-	scf
-	ccf
+	xor a ; faster
 	sbc	hl,de
 	ex	(sp),hl
 	inc	hl
 	djnz	_DIV_HL_DE_loop
-	ret	
+	jr _DIV_HL_DE.done
 _DIV_HL_DE_skip:
 	ex	(sp),hl
 	djnz	_DIV_HL_DE_loop
-	ret	
+_DIV_HL_DE.done:
+	pop de ; remainder?
+	pop af ; restore sign of result
+	or a
+	ret z ; if positive, return result
+	ex de,hl
+	ld hl,0
+	sbc hl,de ; else negate result
+	ret

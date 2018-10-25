@@ -4,6 +4,8 @@
 ;; DESTROYS: af,b,hl,de
 _MyDispHL:
 	di
+	push iy
+	ld iy,flags
 	push hl
 	ld de,_MyDispHL_scrap
 	ld b,5
@@ -42,6 +44,7 @@ _MyDispHL_print:
 	inc de
 	djnz _MyDispHL_print
 	pop hl
+	pop iy
 	ei
 	ret
 
@@ -53,7 +56,8 @@ _MyDispHL_scrap:
 ;; destroys: hl
 _MyPutS:
 	di
-	
+	push iy
+	ld iy,flags
 	push bc
 	push af
 	ld a,(winBtm)
@@ -61,10 +65,13 @@ _MyPutS:
 _MyPutS1:
 	ld a,(hl)
 	inc hl
+	cp _keyboard_newline
+	jr z,_MyPutS3
 	or a
 	scf
 	jr z,_MyPutS2
 	bcall(_PutC)
+_MyPutS_win:
 	ld a,(curRow)
 	cp b
 	jr c,_MyPutS1
@@ -72,6 +79,15 @@ _MyPutS2:
 	pop bc
 	ld a,b
 	pop bc
-	
+	pop iy
 	ei
 	ret
+_MyPutS3: ; newline
+	push bc
+	push hl
+	push de
+	bcall(_NewLine)
+	pop de
+	pop hl
+	pop bc
+	jr _MyPutS_win

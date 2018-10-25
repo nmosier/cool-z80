@@ -71,7 +71,7 @@
 	</array>
 	<key>ProjectGroupsOutlineViewSelectedItemIndexPaths</key>
 	<array>
-		<string>0,0</string>
+		<string>0,10</string>
 	</array>
 	<key>ProjectGroupsOutlineViewWidth</key>
 	<real>125</real>
@@ -86,9 +86,10 @@
 		<string>cool.inc</string>
 		<string>misc.z80</string>
 		<string>boot.z80</string>
+		<string>Object.z80</string>
 	</array>
 	<key>ProjectSelectedTextFileName</key>
-	<string>memory.z80</string>
+	<string>keyboard.z80</string>
 	<key>ProjectSymbolsTableViewAutosaveDictionary</key>
 	<dict>
 		<key>Icon</key>
@@ -123,6 +124,6 @@
 	<key>ProjectSymbolsTableViewSortDescriptors</key>
 	<array/>
 	<key>ProjectWindowFrameKey</key>
-	<string>0 56 1440 777 0 0 1440 877 </string>
+	<string>0 65 1440 777 0 0 1440 877 </string>
 </dict>
 </plist>

@@ -5,7 +5,7 @@
 #define _obj_size_field 2*1
 #define _objdata_offset 2*3
 
-#define _keyboard_newline $FF
+#define _keyboard_newline $0A
 
 
 #macro high(x)

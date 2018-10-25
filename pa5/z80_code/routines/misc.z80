@@ -36,9 +36,9 @@ equality_test.false:
 ;;  * hl: filename
 ;;  * de: line no.	
 _dispatch_abort:
-	bcall(_NewLine)
 	push de
 	push hl
+	bcall(_NewLine)
 	ld hl,_abort_msg
 	call _MyPutS
 	call IO.out_string

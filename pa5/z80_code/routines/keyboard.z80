@@ -39,6 +39,8 @@ _keyboard_interrupt_jump_end:
 _keyboard_interrupt:
 	ex af,af'
 	exx
+	push iy
+	ld iy,flags
 
 	call GetCloneSC
 	
@@ -90,8 +92,10 @@ _	sla a
 	
 _keyboard_interrupt_done:
 	exx
-	ex af,af'
-	jp	$0038 ;; run normal interrupt routine
+	ex af,af'	
+	call $0038
+	pop iy
+	ret
 	
 _keyboard_interrupt_newline:
 	ld hl,(_keyboard_buffer_input)
