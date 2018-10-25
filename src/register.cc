@@ -79,17 +79,17 @@ std::ostream& RegisterPointer::print(std::ostream& os) const {
 }
 
 std::ostream& RegisterPointerOffset::print(std::ostream& os) const {
-	os << reg_;
-	if (offset_ >= 0) os << "+" << std::to_string(offset_);
-	else os << "-" << std::to_string(-offset_);
+	os << reg_ << "+" << std::to_string(offset_);
+	//if (offset_ >= 0) os << "+" << std::to_string(offset_);
+	//else os << "-" << std::to_string(-offset_);
 	return os;
 }
 
-RegisterPointerOffset &RegisterPointerOffset::advanced(int8_t d) const {
-	const int8_t this_offset = offset();
+RegisterPointerOffset &RegisterPointerOffset::advanced(uint8_t d) const {
+	const uint8_t this_offset = offset();
 	const int new_offset = ((int) this_offset) + ((int) d);
-	assert (new_offset < 128 && new_offset >= -128);
-	return *(new RegisterPointerOffset(reg(), (int8_t) this_offset));
+	assert ((uint8_t) new_offset == new_offset);
+	return *(new RegisterPointerOffset(reg(), (uint8_t) this_offset + d));
 }
 
 // values
