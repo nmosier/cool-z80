@@ -77,6 +77,10 @@ static const char *gc_collect_names[] =
 //            
 //////////////////////////////////////////////////////////////////////////////
 
+void emit_include(const std::string& filename, std::ostream& os) {
+	os << INCLUDE << "\"" << filename << "\"" << std::endl;
+}
+
 template <typename T, typename U>
 void emit_load(const RegisterValue& dst, const ImmediateValue<T,U>& src, std::ostream& os) {
 	assert (dst.size() == src.size());
@@ -163,7 +167,6 @@ void emit_load(const MemoryValue& dst, const RegisterValue& src, std::ostream& o
 }
 
 void emit_load(const RegisterValue& dst, const MemoryValue& src, std::ostream& os) {
-
 	if (src.loc().kind() == MemoryLocation::Kind::ABS) {
 		if (dst.size() == 1) {
 			assert (*src.reg() == ACC);
@@ -576,7 +579,7 @@ static void emit_fetch_bool(const RegisterValue& dst, const MemoryValue& src, st
 // 		emit_add(src, -DEFAULT_OBJFIELDS, s);
 
 		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
-			emit_dec(*dst.reg(), s);
+			emit_dec(*src.reg(), s);
 		}		
 	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
 		const RegisterPointerOffset& src_loc = (const RegisterPointerOffset&) src.loc();
@@ -870,8 +873,6 @@ void CgenNode::CreateDispatchTables(DispatchTables& tables, int next_offset) {
 }
 
 
-
-
 // CgenKlassTable initializer
 //  -builds inheritance graph
 //  -assigns class tags
@@ -922,17 +923,17 @@ void CgenKlassTable::CgenGlobalData(std::ostream& os) const {
   os << STRINGTAG << LABEL << DW <<  TagFind(string) << std::endl;
 }
 
-void CgenKlassTable::CgenSelectGC(std::ostream& os) const {
-//   os << GLOBAL << "_MemMgr_INITIALIZER" << std::endl;
-  os << "_MemMgr_INITIALIZER:" << std::endl;
-  os << DW << gc_init_names[cgen_Memmgr] << std::endl;
-//   os << GLOBAL << "_MemMgr_COLLECTOR" << std::endl;
-  os << "_MemMgr_COLLECTOR:" << std::endl;
-  os << DW << gc_collect_names[cgen_Memmgr] << std::endl;
-//   os << GLOBAL << "_MemMgr_TEST" << std::endl;
-  os << "_MemMgr_TEST:" << std::endl;
-  os << DW << (cgen_Memmgr_Test == GC_TEST) << std::endl;
-}
+// void CgenKlassTable::CgenSelectGC(std::ostream& os) const {
+// //   os << GLOBAL << "_MemMgr_INITIALIZER" << std::endl;
+//   os << "_MemMgr_INITIALIZER:" << std::endl;
+//   os << DW << gc_init_names[cgen_Memmgr] << std::endl;
+// //   os << GLOBAL << "_MemMgr_COLLECTOR" << std::endl;
+//   os << "_MemMgr_COLLECTOR:" << std::endl;
+//   os << DW << gc_collect_names[cgen_Memmgr] << std::endl;
+// //   os << GLOBAL << "_MemMgr_TEST" << std::endl;
+//   os << "_MemMgr_TEST:" << std::endl;
+//   os << DW << (cgen_Memmgr_Test == GC_TEST) << std::endl;
+// }
 
 void CgenKlassTable::CgenConstants(std::ostream& os) const {
   // Make sure "default" values are in their respective tables
@@ -1008,17 +1009,17 @@ void CgenKlassTable::CgenDispatchTables(std::ostream& os) const {
 void CgenNode::EmitPrototypeObject(std::ostream& os) {
   // handle Int, String, Bool separately
   os << DW << "-1" << std::endl;	// GC tag
-  os << klass()->name() << PROTOBJ_SUFFIX << LABEL; // label
-  os << DW << tag_ << std::endl; // tag
+  os << klass()->name() << PROTOBJ_SUFFIX << LABEL; // protobj label
+  os << DW << tag_ << std::endl; // class tag
   if (klass()->name() == String) {
-    os << DW << 5 << std::endl;
+    os << DW << 7 << std::endl; // size of object (bytes)
     os << DW << klass()->name() << DISPTAB_SUFFIX << std::endl;
     os << DW;
     CgenRef(os, gIntTable.lookup(0)) << std::endl;
     os << DW << 0 << std::endl;
   } else if (klass()->name() == Int || klass()->name() == Bool) {
     // attributes end up being the same for Int & Bool
-    os << DW << 4 << std::endl;
+    os << DW << 8 << std::endl; // 8 bytes
     os << DW << klass()->name() << DISPTAB_SUFFIX << std::endl;
     os << DW << 0 << std::endl;
   } else {
@@ -1233,13 +1234,6 @@ void CgenKlassTable::CgenClassMethods(std::ostream& os) const {
   root()->EmitMethods(os);
 }
 
-void CgenZ80Routines(std::ostream& os) {
-	const std::vector<Routine *> routines = Routine::routines;
-	for (Routine *routine : routines) {
-		routine->def(os);
-	}
-}
-
 void CgenKlassTable::CgenInheritanceTree(std::ostream& os) const {
 	os << INHERITANCE_TREE << LABEL;
 
@@ -1251,17 +1245,36 @@ void CgenKlassTable::CgenInheritanceTree(std::ostream& os) const {
 }
 
 void CgenHeader(std::ostream& os) {
-	os << "#include \"ti83plus.inc\"" << std::endl;
 	os << ".org $9D93" << std::endl;
 	os << ".db $BB,$6D ; AsmPrgm" << std::endl;
 	os << std::endl;
+	
+//	os << JP << "_start" << std::endl;
+	
+	std::string lib_files[] = {
+		"ti83plus.inc",
+		"cool.inc",
+		"boot.z80",
+		"memory.z80",
+		"display.z80",
+		"keyboard.z80",
+		"misc.z80",
+		"Object.z80",
+		"IO.z80",
+		"math.z80",
+		"String.z80"
+	};
+
+	for (std::string file : lib_files) {
+		emit_include(file, os);
+	}
 }
 
 void CgenKlassTable::CodeGen(std::ostream& os) const {
   CgenHeader(os);
 
   CgenGlobalData(os);
-  CgenSelectGC(os);
+//  CgenSelectGC(os);
   CgenConstants(os);
   
   CgenPrototypeObjects(os);
@@ -1273,8 +1286,6 @@ void CgenKlassTable::CodeGen(std::ostream& os) const {
   
   CgenClassInits(os);
   CgenClassMethods(os);
-  
-  CgenZ80Routines(os);
 }
 
 
@@ -1289,7 +1300,8 @@ void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // perform callee AR setup
   emit_push(FP, os);
   emit_push(SELF, os);
-  emit_load(RegisterValue(FP), Immediate16(static_cast<int16_t>(0)), os);
+  // note: FP is below (on top of) all temporaries on the stack, since IY can only be indexed with positive offsets
+  emit_load(RegisterValue(FP), Immediate16(static_cast<int16_t>(-temp_count * WORD_SIZE)), os);
   emit_add(FP, SP, os);	// FP = new frame pointer value
   
   os << EX << rDE << "," << rHL << std::endl;
@@ -1298,20 +1310,26 @@ void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   int formals_counter = formals()->size();
   for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
     Formal* formal = *formals_it;
+    --formals_counter; // subtract first, since formals_counter starts out at 1 past end of args
     // need to assign location relative to FP
 //     MemoryLocation* formal_loc = new IndirectLocation(formals_counter, FP);
-	RegisterPointerOffset formal_loc(FP, (formals_counter + CgenLayout::ActivationRecord::arguments_end)*WORD_SIZE);
+	RegisterPointerOffset formal_loc(FP, formals_counter * WORD_SIZE + CgenLayout::ActivationRecord::arguments_end);
     varEnv.Push(formal->name(), formal_loc);
-    --formals_counter;
   }
   
   body_->CodeGen(varEnv, os); // generate method body
-  int temporary_offset = varEnv.GetTemporaryMaxCount() * WORD_SIZE;
+  //int temporary_offset = varEnv.GetTemporaryMaxCount() * WORD_SIZE; // not sure why this was being used; redundant
   
   // pop entire AR off stack, NOT INCLUDING return addr. & arguments from caller
-  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temporary_offset * WORD_SIZE)), os);
+  os << EX << rDE << "," << rHL << std::endl; // preserve return value
+  
+  // not sure why temporary_offset was being used instead of temp_count...
+  //emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temporary_offset * WORD_SIZE)), os);
+  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temp_count * WORD_SIZE)), os);
+  
   emit_add(rHL, RegisterValue(SP), os);
   emit_load(RegisterValue(SP), RegisterValue(rHL), os);
+  os << EX << rDE << "," << rHL << std::endl;
   emit_pop(SELF, os);
   emit_pop(FP, os);
   
@@ -1354,6 +1372,7 @@ void NoExpr::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 
 void Ref::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   if (name_ == self) {
+  	// this extra step is necessary -- ld h,ixh isn't allowed
     emit_load(rDE, SELF, os);
     os << EX << rDE << "," << rHL << std::endl;
   } else {
@@ -1369,8 +1388,8 @@ void Ref::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   	} else if (loc.kind() == MemoryLocation::Kind::PTR_OFF) {
   		// really, only this case should be called
   		const RegisterPointerOffset& ptr_off = (const RegisterPointerOffset&) loc;
-  		emit_load(ARG0.low(), ptr_off[0], os);
-  		emit_load(ARG0.high(), ptr_off[1], os);
+  		emit_load(ARG0.low(), MemoryValue(ptr_off[0]), os);
+  		emit_load(ARG0.high(), MemoryValue(ptr_off[1]), os);
   	} else {
   		assert (false);
   	}
@@ -1392,17 +1411,20 @@ void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   	rhs_->CodeGen(varEnv, os);
   	emit_pop(rDE, os);
   	
-  	if (type() == Int) {
+  	if (lhs_->type() == Int) {
+  		// if LHS & RHS are Ints
   		emit_fetch_int(RegisterValue(rBC), RegisterPointer(rHL), os);
   		os << EX << rDE << "," << rHL << std::endl;
   		emit_fetch_int(RegisterValue(rDE), RegisterPointer(rHL), os);
   		os << EX << rDE << "," << rHL << std::endl;
-  	} else if (type() == Bool) {
+  	} else if (lhs_->type() == Bool) {
+  		// if LHS & RHS are bools
   		emit_fetch_bool(RegisterValue(rBC), RegisterPointer(rHL), os);
   		os << EX << rDE << "," << rHL << std::endl;
   		emit_fetch_bool(RegisterValue(rDE), RegisterPointer(rHL), os);
   		os << EX << rDE << "," << rHL << std::endl;
   	} else {
+  		// else operands are objects
   		os << EX << rDE << "," << rHL << std::endl;
   		emit_load(rB, rD, os);
   		emit_load(rC, rE, os);
@@ -1424,18 +1446,8 @@ void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   		break;
   	case BO_Mul:
   		{
-  		// fast multiplication algorithm
-  		emit_load(rC, rH, os); // save high byte
-  		emit_load(ACC, rL, os);
-  		// AbsoluteAddress mul_de_a(Routine::find("MUL_DE_A")->ref());
-  		AbsoluteAddress mul_de_a("_MUL_DE_A");
-  		emit_call(mul_de_a, nullptr, os); // result in HL
-//  		AbsoluteAddress mul_c_d(Routine::find("MUL_C_D")->ref());
-  		AbsoluteAddress mul_c_d("_MUL_C_D");
-  		emit_call(mul_c_d, nullptr, os);
-  		emit_load(rD, rA, os);
-  		emit_load(rE, Immediate8(static_cast<int8_t>(0)), os);
-  		emit_add(rHL, rDE, os);
+  		emit_load(rDE, rBC, os);
+  		emit_call(lib::MUL_HL_DE, nullptr, os);
 		break;
 		}
   	case BO_Div:
@@ -1443,23 +1455,22 @@ void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   		// fast division (not signed yet...)
   		emit_load(rD, rB, os);
   		emit_load(rE, rC, os);// LD de,bc
-  		AbsoluteAddress div_hl_de(Routine::find("DIV_HL_DE")->ref());
-  		emit_call(div_hl_de, nullptr, os);
-  		emit_pop(rDE, os);
+  		emit_call(lib::DIV_HL_DE, nullptr, os);
   		break;
   		}
 	case BO_LT:
-		os << SCF << std::endl;
-		os << CCF << std::endl;
+		os << XOR << ACC << std::endl;
 		os << SBC << rHL << "," << rBC << std::endl;
+		os << ADD << rHL << "," << rHL << std::endl;
 		emit_load(RegisterValue(rHL), CgenRef(true), os);
-		emit_jr(l_true, Flags::C, os);
+		emit_jr(l_true, Flags::C, os); // carry flag is set iff _lhs_ - _rhs_ < 0
 		emit_load(RegisterValue(rHL), CgenRef(false), os);
 		emit_label_def(l_true, os);
 		break;
 	case BO_LE:
 		os << SCF << std::endl;
 		os << SBC << rHL << "," << rBC << std::endl;
+		os << ADD << rHL << "," << rHL << std::endl;
 		emit_load(RegisterValue(rHL), CgenRef(true), os);
 		emit_jr(l_true, Flags::C, os);
 		emit_load(RegisterValue(rHL), CgenRef(false), os);
@@ -1467,8 +1478,7 @@ void BinaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 		break;
 		
 	case BO_EQ:
-		os << SCF << std::endl;
-		os << CCF << std::endl;
+		os << XOR << rA << std::endl;
 		os << SBC << rHL << "," << rBC << std::endl;
 		emit_load(RegisterValue(rHL), CgenRef(true), os);
 		emit_jr(l_end, Flags::Z, os);
@@ -1507,12 +1517,10 @@ void UnaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   	input_->CodeGen(varEnv, os);
   	
   	emit_fetch_int(rDE, RegisterPointer(ARG0), os);
-  	emit_load(ACC, rD, os);
-  	os << CPL << std::endl;
-  	emit_load(rD, ACC, os);
-  	emit_load(ACC, rE, os);
-	os << CPL << std::endl;
-	emit_load(rE, ACC, os);
+  	emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(0)), os);
+	os << XOR << rA << std::endl;
+	os << SBC << rHL << "," << rDE << std::endl;
+	os << EX << rDE << "," << rHL << std::endl;
 	emit_pop(ARG0, os);
 	emit_store_int(rDE, RegisterPointer(ARG0), os);
 	break;
@@ -1521,23 +1529,21 @@ void UnaryOperator::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   	assert (input_->type() == Bool);
   	input_->CodeGen(varEnv, os);
   	emit_fetch_bool(rDE, RegisterPointer(ARG0), os);
-  	os << XOR << rA << std::endl;
-  	os << OR << rD << std::endl;
+  	os << LD << rA << "," << rD << std::endl;
   	os << OR << rE << std::endl;
-  	emit_load(RegisterValue(ARG0), CgenRef(true), os);
-  	emit_jr(l_end, Flags::NZ, os);
   	emit_load(RegisterValue(ARG0), CgenRef(false), os);
+  	emit_jr(l_end, Flags::NZ, os);
+  	emit_load(RegisterValue(ARG0), CgenRef(true), os);
   	emit_label_def(l_end, os);
   	break;
   
   case UO_IsVoid:  	
   	input_->CodeGen(varEnv, os);
-  	os << XOR << rA << std::endl;
-  	os << OR << rH << std::endl;
+  	os << LD << rA << "," << rH << std::endl;
   	os << OR << rL << std::endl;
-  	emit_load(RegisterValue(ARG0), CgenRef(true), os);
-  	emit_jr(l_end, Flags::NZ, os);
   	emit_load(RegisterValue(ARG0), CgenRef(false), os);
+  	emit_jr(l_end, Flags::NZ, os);
+  	emit_load(RegisterValue(ARG0), CgenRef(true), os);
   	emit_label_def(l_end, os);
   	break;
   
@@ -1797,6 +1803,7 @@ void Let::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   init_->CodeGen(varEnv, os);
   varEnv.Push(name_, let_var);
   emit_load(let_var, ARG0, os);
+  os << BREAK << std::endl;
   
   body_->CodeGen(varEnv, os);
   
@@ -1892,6 +1899,11 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   
   // call static method on given class
   os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
+  
+  for (Expression* expr : *actuals_) {
+	emit_pop(rDE, os); // pop off args
+  }
+  
   emit_jr(dispatch_end, nullptr, os);
 
 	emit_label_def(dispatch_abort, os);
@@ -1907,7 +1919,6 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   const int dispatch_end = label_counter++;
   const int dispatch_abort = label_counter++;
 
-//   emit_push(RA, os);
   for (Expression* expr : *actuals_) {
     expr->CodeGen(varEnv, os);
     emit_push(ARG0, os);
@@ -1944,6 +1955,7 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_return(Flags::none, os);     // jp (bc)
   
   emit_label_def(dispatch_abort, os); // if receiver is NULL
+  	os << BREAK << std::endl;
 	emit_load(RegisterValue(rDE), Immediate16(static_cast<uint16_t>(this->loc())), os);
 	emit_load(RegisterValue(ARG0), CgenRef(gStringTable.lookup(varEnv.klass_->filename()->value())), os);
 	const AbsoluteAddress disp_abort("_dispatch_abort");
@@ -1951,6 +1963,10 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 
   
   emit_label_def(dispatch_end, os);
+  // pop off params
+  for (Expression *expr : *actuals_) {
+  	emit_pop(rDE, os);
+  }
 }
 
 void Assign::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
