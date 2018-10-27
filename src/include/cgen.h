@@ -214,6 +214,7 @@ class CgenKlassTable : public KlassTable<CgenNode> {
   }
   
   std::pair<bool,int> InheritanceDistance(const CgenNode* node1, const CgenNode* node2) const;
+  int InheritanceDepth(const CgenNode *node) const;
 
 	std::map<std::size_t, const CgenNode *> GetTags() const;
 
