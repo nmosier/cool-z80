@@ -508,23 +508,13 @@ static void emit_fetch_int(const RegisterValue& dst, const MemoryValue& src, std
 		emit_load(RegisterValue(scrap_reg), Immediate16(offset), s);
 		emit_add(RegisterValue(src_reg), Register(scrap_reg), s);
 		
-		/*
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
-			emit_inc(src_reg, s);
-		} */
-		
 		emit_load(dst_reg.low(), src, s);
 		emit_inc(src_reg, s);
 		emit_load(dst_reg.high(), src, s);
 		
 		s << SCF << std::endl;
 		s << SBC << src_reg << "," << scrap_reg << std::endl;
-		
 		emit_pop(scrap_reg, s);
-		/*
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE + 1; ++i) {
-			emit_dec(src_reg, s);
-		} */
 	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
 		const RegisterPointerOffset& src_loc = (const RegisterPointerOffset&) src.loc();
 		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS+1 < 128);
@@ -550,22 +540,30 @@ static void emit_store_int(const RegisterValue& src, const MemoryValue& dst, std
 		const AbsoluteAddress& addr = (const AbsoluteAddress&) dst.loc();
 		emit_load(addr[DEFAULT_OBJFIELDS], src, s);
 	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR) {
-		// use 2 load instructions
-		assert (*src.reg() != ((const RegisterPointer&) dst.loc()).reg());
-		
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
-			emit_inc(*dst.reg(), s);
-		}
-		
+		// get used registers
+		const Register16& dst_reg = (const Register16&) *dst.reg();
 		const Register16& src_reg = (const Register16&) *src.reg();
+		int16_t offset = DEFAULT_OBJFIELDS * WORD_SIZE;
+	
+		assert (dst_reg == rHL && src_reg != dst_reg);
 		
+		// find scrap register
+		std::set<const Register16 *> regs16;
+		regs16.insert(&rHL); regs16.insert(&rDE); regs16.insert(&rBC);
+		regs16.erase(&dst_reg); regs16.erase(&src_reg);
+		const Register16& scrap_reg = **regs16.begin();
+		
+		emit_push(scrap_reg, s);
+		emit_load(RegisterValue(scrap_reg), Immediate16(offset), s);
+		emit_add(RegisterValue(dst_reg), Register(scrap_reg), s);
+			
 		emit_load(dst, src_reg.low(), s);
-		emit_inc(*dst.reg(), s);
+		emit_inc(dst_reg, s);
 		emit_load(dst, src_reg.high(), s);
 		
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE + 1; ++i) {
-			emit_dec(*dst.reg(), s);
-		}
+		s << SCF << std::endl;
+		s << SBC << dst_reg << "," << scrap_reg << std::endl;
+		emit_pop(scrap_reg, s);
 	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
 		const RegisterPointerOffset& ptr_off = (const RegisterPointerOffset&) dst.loc();
 		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS+1 < 128);
@@ -588,20 +586,42 @@ static void emit_fetch_bool(const RegisterValue& dst, const MemoryValue& src, st
 		const AbsoluteAddress& src_addr = (const AbsoluteAddress&) src.loc();
 		emit_load(dst, src_addr[DEFAULT_OBJFIELDS], s);
 	} else if (src.loc().kind() == MemoryLocation::Kind::PTR) {
-		const RegisterPointer& src_loc = (const RegisterPointer&) src.loc();
-		assert (*dst.reg() != src_loc.reg().high() && *dst.reg() != src_loc.reg().low());
-// 		emit_add(src, DEFAULT_OBJFIELDS, s);
+		// get used registers
+		const Register16& dst_reg = (const Register16&) *dst.reg();
+		const Register16& src_reg = (const Register16&) *src.reg();
+		int16_t offset = DEFAULT_OBJFIELDS * WORD_SIZE;
+	
+		// const RegisterPointer& src_loc = (const RegisterPointer&) src.loc();
+		assert (src_reg == rHL && dst_reg != src_reg);
+		
+		// find scrap register
+		std::set<const Register16 *> regs16;
+		regs16.insert(&rHL); regs16.insert(&rDE); regs16.insert(&rBC);
+		regs16.erase(&dst_reg); regs16.erase(&src_reg);
+		const Register16& scrap_reg = **regs16.begin();
+		
+		emit_push(scrap_reg, s);
+		emit_load(RegisterValue(scrap_reg), Immediate16(offset), s);
+		emit_add(RegisterValue(src_reg), Register(scrap_reg), s);
 
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+		/* for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
 			emit_inc(*src.reg(), s);
-		}
+		} */
+	
+		emit_load(dst_reg.low(), src, s);
+		emit_inc(src_reg, s);
+		emit_load(dst_reg.high(), src, s);
 
-		emit_load(dst, src, s);
+//		emit_load(dst, src, s);
 // 		emit_add(src, -DEFAULT_OBJFIELDS, s);
 
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+		/* for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
 			emit_dec(*src.reg(), s);
-		}		
+		}	 */
+		
+		s << SCF << std::endl;
+		s << SBC << src_reg << "," << scrap_reg << std::endl;
+		emit_pop(scrap_reg, s);
 	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
 		const RegisterPointerOffset& src_loc = (const RegisterPointerOffset&) src.loc();
 		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS < 128);
@@ -621,18 +641,40 @@ static void emit_store_bool(const RegisterValue& src, const MemoryValue& dst, st
 	} else if (dst.loc().kind() == MemoryLocation::Kind::ABS) {
 		emit_load(dst[DEFAULT_OBJFIELDS], src, s);
 	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR) {
-		const RegisterPointer& dst_loc = (const RegisterPointer&) dst.loc();
-		assert (*src.reg() != dst_loc.reg().high() && *src.reg() != dst_loc.reg().low());
+		// get used registers
+		const Register16& dst_reg = (const Register16&) *dst.reg();
+		const Register16& src_reg = (const Register16&) *src.reg();
+		int16_t offset = DEFAULT_OBJFIELDS * WORD_SIZE;
+	
+		assert (dst_reg == rHL && src_reg != dst_reg);
 		
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+		/* for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
 			emit_inc(*dst.reg(), s);
-		}
+		} */
 		
-		emit_load(dst, src, s);
+		// find scrap register
+		std::set<const Register16 *> regs16;
+		regs16.insert(&rHL); regs16.insert(&rDE); regs16.insert(&rBC);
+		regs16.erase(&dst_reg); regs16.erase(&src_reg);
+		const Register16& scrap_reg = **regs16.begin();
 		
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+		emit_push(scrap_reg, s);
+		emit_load(RegisterValue(scrap_reg), Immediate16(offset), s);
+		emit_add(RegisterValue(dst_reg), Register(scrap_reg), s);
+			
+		emit_load(dst, src_reg.low(), s);
+		emit_inc(dst_reg, s);
+		emit_load(dst, src_reg.high(), s);
+		
+		s << SCF << std::endl;
+		s << SBC << dst_reg << "," << scrap_reg << std::endl;
+		emit_pop(scrap_reg, s);
+		
+		//emit_load(dst, src, s);
+		
+		/* for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
 			emit_dec(*dst.reg(), s);
-		}
+		} */
 	} else if (dst.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
 		const RegisterPointer& dst_loc = (const RegisterPointer&) dst.loc();
 		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS < 128);
