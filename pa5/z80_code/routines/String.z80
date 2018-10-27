@@ -2,7 +2,8 @@
 ;; contains all built-in routines for cool String object
 
 ; preserves all regs
-String.length:
+; NOT the cool function
+String.length_:
 	push de
 	inc hl
 	inc hl ; hl points to size field
@@ -16,6 +17,23 @@ String.length:
 	pop de
 	ret
 	
+; the cool function String.length()
+String.length:
+	call String.length_
+	push hl
+	ld hl,Int_protObj
+	call Object.copy
+	ld d,h
+	ld e,l ; ld bc,hl
+	ld bc,_int_objdata_offset
+	add hl,bc
+	pop bc
+	ld (hl),c
+	inc hl
+	ld (hl),b
+	ex de,hl
+	ret
+	
 String.concat:
 	pop bc
 	pop de
@@ -24,14 +42,14 @@ String.concat:
 	ex de,hl
 	ld b,h
 	ld c,l ; ld bc,hl
-	call String.length ; len(arg1)
+	call String.length_ ; len(arg1)
 	push hl ; stack: $ ret arg1 len(arg1)
 	push bc
 	
 	ex de,hl
 	ld b,h
 	ld c,l
-	call String.length
+	call String.length_
 	push hl
 	push bc
 	; STACK: $ ret len(arg1) arg1 len(arg0) arg0
