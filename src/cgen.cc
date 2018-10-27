@@ -43,6 +43,7 @@ limitations under the License.
 #include <cmath>
 #include <deque>
 #include <exception>
+#include <set>
 
 using namespace cool;
 
@@ -489,21 +490,41 @@ static void emit_fetch_int(const RegisterValue& dst, const MemoryValue& src, std
 		const AbsoluteAddress& addr = (const AbsoluteAddress&) src.loc();
 		emit_load(dst, addr[DEFAULT_OBJFIELDS], s);
 	} else if (src.loc().kind() == MemoryLocation::Kind::PTR) {
-		// can load in two 1-byte LD instructions
-		assert (*dst.reg() != ((const RegisterPointer&) src.loc()).reg()); // make sure not loading to same register
-		
-		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
-			emit_inc(*src.reg(), s);
-		}
-		
+		// get used registers
 		const Register16& dst_reg = (const Register16&) *dst.reg();
+		const Register16& src_reg = (const Register16&) *src.reg();
+		int16_t offset = DEFAULT_OBJFIELDS * WORD_SIZE;
+		
+		assert (src_reg == rHL && dst_reg != src_reg); // make sure not loading to same register
+		
+		// find scrap register
+		std::set<const Register16 *> regs16;
+		regs16.insert(&rHL); regs16.insert(&rDE); regs16.insert(&rBC);
+		regs16.erase(&dst_reg); regs16.erase(&src_reg);
+		const Register16& scrap_reg = **regs16.begin();
+		
+		// can load in two 1-byte LD instructions
+		emit_push(scrap_reg, s);
+		emit_load(RegisterValue(scrap_reg), Immediate16(offset), s);
+		emit_add(RegisterValue(src_reg), Register(scrap_reg), s);
+		
+		/*
+		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE; ++i) {
+			emit_inc(src_reg, s);
+		} */
+		
 		emit_load(dst_reg.low(), src, s);
-		emit_inc(*src.reg(), s);
+		emit_inc(src_reg, s);
 		emit_load(dst_reg.high(), src, s);
 		
+		s << SCF << std::endl;
+		s << SBC << src_reg << "," << scrap_reg << std::endl;
+		
+		emit_pop(scrap_reg, s);
+		/*
 		for (int i = 0; i < DEFAULT_OBJFIELDS * WORD_SIZE + 1; ++i) {
-			emit_dec(*src.reg(), s);
-		}
+			emit_dec(src_reg, s);
+		} */
 	} else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) {
 		const RegisterPointerOffset& src_loc = (const RegisterPointerOffset&) src.loc();
 		assert (DEFAULT_OBJFIELDS >= -128 && DEFAULT_OBJFIELDS+1 < 128);
@@ -745,7 +766,7 @@ std::ostream& CgenDef(std::ostream& os, const StringEntry* entry, std::size_t cl
   os << DW << "-1" << std::endl;
   CgenRef(os, entry) << LABEL;
   os << DW << class_tag << std::endl
-     << DW << (DEFAULT_OBJFIELDS + STRING_SLOTS + (value.size() + WORD_SIZE)/WORD_SIZE) << std::endl // size
+     << DW << (DEFAULT_OBJFIELDS+STRING_SLOTS)*WORD_SIZE + (value.size()+1) << std::endl // size
      << DW; emit_disptable_ref(String, os); os << std::endl;
   os << DW; CgenRef(os, length_entry) << std::endl;
   emit_string_constant(os, value.c_str());
@@ -764,7 +785,7 @@ std::ostream& CgenDef(std::ostream& os, const Int16Entry* entry, std::size_t cla
   os << DW << "-1" << std::endl;
   CgenRef(os, entry) << LABEL;
   os << DW << class_tag << std::endl
-     << DW << (DEFAULT_OBJFIELDS + INT_SLOTS) << std::endl
+     << DW << (DEFAULT_OBJFIELDS+INT_SLOTS)*WORD_SIZE << std::endl
      << DW; emit_disptable_ref(Int, os); os << std::endl;
   os << DW << entry->value() << std::endl;
   return os;
@@ -782,7 +803,7 @@ std::ostream& CgenDef(std::ostream& os, bool entry, std::size_t class_tag) {
   os << DW << "-1" << std::endl;
   CgenRef(os, entry) << LABEL;
   os << DW << class_tag << std::endl
-     << DW << (DEFAULT_OBJFIELDS + BOOL_SLOTS) << std::endl
+     << DW << (DEFAULT_OBJFIELDS+BOOL_SLOTS)*WORD_SIZE << std::endl
      << DW; emit_disptable_ref(Bool, os); os << std::endl;
   os << DW << ((entry) ? 1 : 0) << std::endl;
   return os;
@@ -1046,6 +1067,10 @@ void CgenKlassTable::CgenClassNameTab(std::ostream& os) const {
     
   for (std::pair<std::size_t,Symbol*> p : ordered_class_names) {
     bool had_length_entry = gIntTable.has(p.second->value().size());
+    bool had_string_entry = gStringTable.has(p.second->value());
+    
+    if (had_string_entry) { continue; } // skip if class' string already generated
+    
     gStringTable.emplace(p.second->value());
     Symbol* class_name = gStringTable.lookup(p.second->value());
     CgenDef(os, class_name, TagFind(String));
@@ -1183,7 +1208,14 @@ void CgenNode::EmitMethods(std::ostream& os) {
 
 void CgenNode::EmitInheritanceInfo(std::ostream& os) const {
 	os << DW << tag_ << std::endl;
-	os << DW << (parent_->tag_ - tag_) * CgenLayout::InheritanceTree::entry_length << std::endl;
+	os << DW << (parent_->tag_ - tag_) * CgenLayout::InheritanceTree::entry_length - 1 << std::endl;
+}
+
+int CgenKlassTable::InheritanceDepth(const CgenNode *node) const {
+	int depth;
+	for (depth = 0; node && node != root(); ++depth, node = node->parent()) {}
+	assert (node != nullptr);
+	return depth;
 }
 
 std::pair<bool,int> CgenKlassTable::InheritanceDistance(const CgenNode* child, const CgenNode* parent) const {
@@ -1281,8 +1313,10 @@ void CgenKlassTable::CodeGen(std::ostream& os) const {
   CgenDispatchTables(os);
   CgenClassObjTab(os);
   CgenClassNameTab(os);
+  CgenInheritanceTree(os);
 
   CgenGlobalText(os);
+  
   
   CgenClassInits(os);
   CgenClassMethods(os);
@@ -1301,19 +1335,20 @@ void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_push(FP, os);
   emit_push(SELF, os);
   // note: FP is below (on top of) all temporaries on the stack, since IY can only be indexed with positive offsets
-  emit_load(RegisterValue(FP), Immediate16(static_cast<int16_t>(-temp_count * WORD_SIZE)), os);
+  emit_load(RegisterValue(FP), Immediate16(static_cast<int16_t>(-temp_count*WORD_SIZE)), os);
   emit_add(FP, SP, os);	// FP = new frame pointer value
+  emit_load(SP, FP, os); // update stack pointer to end of temporaries
   
   os << EX << rDE << "," << rHL << std::endl;
-  emit_load(SELF, rDE, os); // bind self, but can only do it with DE -> IX
+  emit_load(RegisterValue(SELF), RegisterValue(rDE), os); // bind self, but can only do it with DE -> IX
 
   int formals_counter = formals()->size();
   for (Formals::const_iterator formals_it = formals_begin(); formals_it != formals_end(); ++formals_it) {
     Formal* formal = *formals_it;
-    --formals_counter; // subtract first, since formals_counter starts out at 1 past end of args
+    --formals_counter; // subtract first, since formals_counter starts out at 1 past last arg
     // need to assign location relative to FP
 //     MemoryLocation* formal_loc = new IndirectLocation(formals_counter, FP);
-	RegisterPointerOffset formal_loc(FP, formals_counter * WORD_SIZE + CgenLayout::ActivationRecord::arguments_end);
+	RegisterPointerOffset formal_loc(FP, (temp_count+formals_counter)*WORD_SIZE + CgenLayout::ActivationRecord::arguments_end);
     varEnv.Push(formal->name(), formal_loc);
   }
   
@@ -1325,7 +1360,7 @@ void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   
   // not sure why temporary_offset was being used instead of temp_count...
   //emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temporary_offset * WORD_SIZE)), os);
-  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temp_count * WORD_SIZE)), os);
+  emit_load(RegisterValue(rHL), Immediate16(static_cast<int16_t>(temp_count*WORD_SIZE)), os);
   
   emit_add(rHL, RegisterValue(SP), os);
   emit_load(RegisterValue(SP), RegisterValue(rHL), os);
@@ -1589,11 +1624,14 @@ void Knew::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 
 void KaseBranch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // need to store location
-  RegisterPointerOffset branch_var_loc(FP, -varEnv.IncTemporaryCount() * WORD_SIZE);
+  RegisterPointerOffset branch_var_loc(FP, varEnv.GetTemporaryCount() * WORD_SIZE);
   varEnv.Push(name_, branch_var_loc);
+  varEnv.IncTemporaryCount();
   
-  // expect address of evaluated objetc expr0 to be held in rBC
-  emit_load(branch_var_loc, rBC, os);	// save expr0 object
+  // expect address of evaluated objetc expr0 to be held on top of stack
+ // emit_load(branch_var_loc, rBC, os);	// save expr0 object
+	emit_pop(rDE, os);
+	emit_load(branch_var_loc, rDE, os);
   
   body_->CodeGen(varEnv, os);
   
@@ -1601,6 +1639,90 @@ void KaseBranch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   varEnv.DecTemporaryCount();
 }
 
+void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
+	const CgenNode *input_node;
+	std::unordered_map<const KaseBranch *, const CgenNode *> branch2node;
+	std::vector<KaseBranch *> branches;
+	std::unordered_map<KaseBranch *, int> branch2label;
+	
+	input_node = gCgenKlassTable->ClassFind(input_->type());
+	
+	// construct KaseBranch-to-CgenNode table and branches vector
+	for (KaseBranch *branch : *cases_) {
+		branch2node[branch] = gCgenKlassTable->ClassFind(branch->decl_type());
+		branch2label[branch] = label_counter++;
+		branches.push_back(branch);
+	}
+
+	// comparator for sorting branches
+	auto sort_branches = [&](const KaseBranch *lhs, const KaseBranch *rhs) {
+		int left_depth = gCgenKlassTable->InheritanceDepth(branch2node[lhs]);
+		int right_depth = gCgenKlassTable->InheritanceDepth(branch2node[rhs]);
+		
+		return left_depth > right_depth;
+	};
+	
+	// sort the branches
+	std::sort(branches.begin(), branches.end(), sort_branches);
+
+	//-- ASSEMBLY CODE GENERATION STARTS HERE --//
+	int abort_label = label_counter++;
+	int end_label = label_counter++;
+	
+	// evaluate input expression
+	input_->CodeGen(varEnv, os);
+	emit_push(ARG0, os); // preserve address of input object
+	
+	// set rBC = tag of input object in rHL
+	emit_load(RegisterValue(rBC), RegisterPointer(ARG0), os);
+	
+	// generate inheritance search code for each branch
+	for (KaseBranch *branch : branches) {
+		int branch_tag = branch2node[branch]->tag();
+		int16_t tree_offset = CgenLayout::InheritanceTree::entry_length * branch_tag;
+		os << LD << rHL << "," << INHERITANCE_TREE << "+" << tree_offset << std::endl;
+		
+		// inheritance tree traversal loop
+		int loop_label = label_counter++;
+		int branch_label = branch2label[branch];
+		emit_label_def(loop_label, os);
+			emit_load(RegisterValue(rDE), RegisterPointer(rHL), os);
+			os << EX << rDE << "," << rHL << std::endl;
+			os << XOR << rA << std::endl;
+			os << SBC << rHL << "," << rBC << std::endl; // compare tags
+			emit_jp(branch_label, Flags::Z, os); // if tags equal, go to branch
+			
+			// otherwise, compute parent node
+			os << EX << rDE << "," << rHL << std::endl;
+			os << INC << rHL << std::endl;
+			os << INC << rHL << std::endl; // rHL points to offset in tree
+			emit_load(RegisterValue(rDE), RegisterPointer(rHL), os);
+			emit_add(RegisterValue(rHL), RegisterValue(rDE), os);
+						
+			// test if offset is 0
+			os << LD << rA << "," << rD << std::endl;
+			os << OR << rE << std::endl;
+			emit_jr(loop_label, Flags::NZ, os);
+			
+			// next case follows
+	}
+	
+	emit_label_def(abort_label, os);
+		os << BREAK << std::endl; // TO BE IMPLEMENTED
+		
+		
+	// codegen branches
+	for (KaseBranch *branch : branches) {
+		emit_label_def(branch2label[branch], os);
+		branch->CodeGen(varEnv, os);
+		emit_jp(end_label, nullptr, os);
+	}
+	
+	emit_label_def(end_label, os);
+	
+}
+
+/*
 void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   const int case_loop = label_counter++;
   const int case_loop_continue = label_counter++;
@@ -1628,27 +1750,16 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // de = tag of expr0
   emit_load(RegisterValue(rHL), LabelValue(INHERITANCE_TREE), os);
   
-  const double log_entry_length_d = std::log2(CgenLayout::InheritanceTree::entry_length);
-  if (log_entry_length_d == (double)((int) log_entry_length_d))	{
-  	// then entry_length = 2^c for some integer c
-  	// can optimize
-  	const int log_entry_length = (int) log_entry_length_d;
-  	
-  	os << EX << rDE << "," << rHL << std::endl;
-  	for (int i = 0; i < log_entry_length; ++i) {
-  		emit_add(rHL, rHL, os); // faster than bit shifting
-  	}
-  	emit_add(rHL, rDE, os);
-  } else {
-  	// need to repeatedly add de to hl
-  	for (int i = 0; i < CgenLayout::InheritanceTree::entry_length; ++i) {
-	  	emit_add(rHL, rDE, os);
-	}
-  }
+  os << EX << rDE << "," << rHL << std::endl;
+  emit_add(rHL, rHL, os); // faster than bit shifting
+  emit_add(rHL, rDE, os);
   // hl = beginning of typeid's entry in inheritance table  
   
   // now, find optimal branch type match search order
   	const CgenNode *exp0_node = gCgenKlassTable->ClassFind(input_->type());
+  	
+  	std::clog << "exp0_node=" << exp0_node->tag() << std::endl;
+  	
 	std::vector<const CgenNode *> subclass_nodes, superclass_nodes;
 	std::unordered_map<const CgenNode *, const KaseBranch *> subclass_map, superclass_map;
 	for (const KaseBranch *branch : *cases_) {
@@ -1661,6 +1772,9 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 			superclass_map[node] = branch;
 		}
 	}
+	
+	std::clog << "subclass_nodes=" << subclass_nodes.size() << std::endl;
+	std::clog << "superclass_nodes=" << superclass_nodes.size() << std::endl;
 	
 	auto sort_nodes = [&](const CgenNode *lhs, const CgenNode *rhs) {
 		std::pair<bool,int> leftchild = gCgenKlassTable->InheritanceDistance(lhs, exp0_node);
@@ -1791,41 +1905,34 @@ void Kase::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 	}
 	os << DW << -1 << std::endl; // marks end of table;
 
+	for (KaseBranch *branch : *cases_) {
+		const CgenNode *node = gCgenKlassTable->ClassFind(branch->decl_type());
+		if (node) {
+			emit_label_def(branch_labels[node], os);
+			branch->CodeGen(varEnv, os);
+			emit_jp(case_end, nullptr, os);
+		}
+	}
 
 	emit_label_def(case_end, os);
 }
+*/
 
 void Let::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // SELF_TYPE not allowed, so don't need to consider
-  RegisterPointerOffset let_var(FP, -varEnv.IncTemporaryCount() * WORD_SIZE);
+  RegisterPointerOffset let_var(FP, varEnv.GetTemporaryCount()*WORD_SIZE);
+	varEnv.IncTemporaryCount();
   varEnv.init_type_ = decl_type_;
   
   init_->CodeGen(varEnv, os);
   varEnv.Push(name_, let_var);
   emit_load(let_var, ARG0, os);
-  os << BREAK << std::endl;
   
   body_->CodeGen(varEnv, os);
   
   varEnv.Pop(name_);
   varEnv.init_type_ = nullptr;
   varEnv.DecTemporaryCount();
-  // 
-//   
-//   
-//   MemoryLocation* let_var = new IndirectLocation(-varEnv.IncTemporaryCount(), FP);
-//   varEnv.init_type_ = decl_type_;
-//   
-//   init_->CodeGen(varEnv, os);
-//   varEnv.Push(name_, let_var);
-//   let_var->emit_store_to_loc(ACC, os);
-//   
-//   body_->CodeGen(varEnv, os);
-//   
-//   varEnv.Pop(name_);
-//   varEnv.init_type_ = nullptr;
-//   varEnv.DecTemporaryCount();
-//   delete let_var;	// cleanup
 }
 
 void Block::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
@@ -1955,7 +2062,6 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_return(Flags::none, os);     // jp (bc)
   
   emit_label_def(dispatch_abort, os); // if receiver is NULL
-  	os << BREAK << std::endl;
 	emit_load(RegisterValue(rDE), Immediate16(static_cast<uint16_t>(this->loc())), os);
 	emit_load(RegisterValue(ARG0), CgenRef(gStringTable.lookup(varEnv.klass_->filename()->value())), os);
 	const AbsoluteAddress disp_abort("_dispatch_abort");
