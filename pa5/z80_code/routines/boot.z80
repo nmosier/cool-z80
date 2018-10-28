@@ -1,0 +1,29 @@
+;; boot.z80
+;; routines.wcodeproj
+;;
+;; Created by Nicholas Mosier on 10/02/2018
+
+;; bootstrap code for cool program
+_start:
+	bcall(_ClrScrnFull)
+	
+	call _memory_initialize
+	ld hl,0
+	ld (curRow),hl
+	call _keyboard_initialize
+	
+	ld hl,Main_protObj
+	call Object.copy
+	call Main_init
+	call Main.main
+	
+	ld hl,_success_msg
+	call _MyPutS
+
+	ld iy,flags
+	im 1	
+
+	ret
+	
+_success_msg:
+	.db "COOL program successfully executed\n",0

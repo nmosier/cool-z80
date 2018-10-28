@@ -98,11 +98,11 @@ _malloc_out_of_mem:
 	ret
 	
 	
-_memory_flags: .db 0
-_memory_init_f equ 0
-_memory_begin: .dw 0
-_memory_free:  .dw 0
-_memory_end:   .dw 0
+;_memory_flags: .db 0
+;_memory_init_f equ 0
+;_memory_begin: .dw 0
+;_memory_free:  .dw 0
+;_memory_end:   .dw 0
 
 _malloc_out_of_mem_msg: .db "malloc: out of mem.",0
 

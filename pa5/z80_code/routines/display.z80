@@ -48,8 +48,8 @@ _MyDispHL_print:
 	ei
 	ret
 
-_MyDispHL_scrap:
-	.db 0,0,0,0,0
+;_MyDispHL_scrap:
+;	.db 0,0,0,0,0
 	
 
 ;;	inputs: hl = ptr to start of string

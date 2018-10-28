@@ -123,17 +123,16 @@ class Main inherits IO {
    -- List, and thus the method isNil in the List class is called and
    -- returns true.
 
-   main() : Object {
-      {
-	 mylist <- new List.cons(1).cons(2).cons(3).cons(4).cons(5);
+   main() : Object {{
+	 mylist <- new List.cons(1).cons(2).cons(3).cons(4).cons(5).cons(6).cons(7).cons(8);
 	 while (not mylist.isNil()) loop
 	    {
 	       print_list(mylist);
 	       mylist <- mylist.tail();
 	    }
 	 pool;
-      }
-   };
+	 in_string();
+   }};
 
 };
 

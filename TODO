@@ -1,0 +1,9 @@
+// TO-DO list for z80-cool
+
+1. implement garbage collection
+   (a) propogate GC tag in Object.copy()
+2. implement big arithmetic
+3. modify library code to only use stack as scratch
+4. generate FLASH apps
+5. start simple optimizer
+6. functionality to wrap ASM in functions?

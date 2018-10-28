@@ -101,7 +101,7 @@ _
 	push de ; reorder stack again
 	ret
 	
-String.concat.strobj: .dw 0
+;String.concat.strobj: .dw 0
 
 
 ; String.substr

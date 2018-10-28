@@ -28,6 +28,10 @@ _keyboard_initialize:
 	
 	ld a,$99
 	ld i,a ; set interrupt vector high byte
+	
+	xor a
+	ld (lastKey),a ; intialize lastkey
+	
 	im 2
 	ei
 	ret
@@ -125,9 +129,9 @@ _keyboard_interrupt_2nd:
 _keyboard_interrupt_end:
 	
 
-_keyboard_buffer_start: .dw 0		; beginning of unread input
-_keyboard_buffer_buffered: .dw 0	; (one past) end of buffered input
-_keyboard_buffer_input: .dw 0		; (one past) end of unbuffered input
+;_keyboard_buffer_start: .dw 0		; beginning of unread input
+;_keyboard_buffer_buffered: .dw 0	; (one past) end of buffered input
+;_keyboard_buffer_input: .dw 0		; (one past) end of unbuffered input
 
 _keyboard_debug_status:
 	;; print status of buffer
@@ -219,9 +223,9 @@ _keyboard_key_LUT:
  .db 0,0        ;37        skMode
  .db 0,0        ;38        skDel
  
-_keyboard_flags: .db 0
-#define _keyboard_flag_alock 0
-#define _keyboard_flag_shift 1	; note alock and shift are mutually exclusive
+;_keyboard_flags: .db 0
+;#define _keyboard_flag_alock 0
+;#define _keyboard_flag_shift 1	; note alock and shift are mutually exclusive
  
  
  
@@ -290,4 +294,4 @@ getResetBitLoop:
 	inc	b
 	jr	c, getResetBitLoop
 	ret
-lastKey: .db 0
+;lastKey: .db 0

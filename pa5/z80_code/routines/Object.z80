@@ -1,0 +1,43 @@
+;; Object.z80
+;; routines.wcodeproj
+;;
+;; Created by Nicholas Mosier on 10/02/2018
+
+Object.copy:
+	push hl
+	inc hl
+	inc hl ; get size bytes
+	ld e,(hl)
+	inc hl
+	ld d,(hl)
+	push de ; save size bytes
+	ex de,hl ; hl = size
+	call _malloc
+	ex de,hl
+	pop bc
+	pop hl
+	push de ; save ptr to new obj
+	ldir ; copy into new object
+	pop hl ; restore new obj ptr
+	ret
+	
+;; prints out name of obj in $a0
+Object.abort:
+	call Object.type_name
+	bcall(_NewLine)
+	call IO.out_string
+	jp _abort_wait
+	
+; returns type_name of obj
+Object.type_name:
+	ld e,(hl)
+	inc hl
+	ld d,(hl) ; de = class ID
+	ld hl,class_nameTab
+	add hl,de
+	add hl,de
+	ld e,(hl)
+	inc hl
+	ld d,(hl)
+	ex de,hl
+	ret

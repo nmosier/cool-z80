@@ -258,6 +258,6 @@ _	ld (_keyboard_buffer_start),hl
 	ret
 
 	
-IO.in_int.flags: .db 0
-IO.in_int.flags.neg .equ 0
+;IO.in_int.flags: .db 0
+;IO.in_int.flags.neg .equ 0
 	
