@@ -14,6 +14,7 @@ _keyboard_initialize:
 	
 	ld hl,_keyboard_interrupt_jump
 	ld de,$9A9A
+	;ld bc,_keyboard_interrupt_end - _keyboard_interrupt
 	ld bc,_keyboard_interrupt_jump_end - _keyboard_interrupt_jump
 	ldir
 	
@@ -107,7 +108,9 @@ _keyboard_interrupt_newline:
 	inc hl
 	ld (_keyboard_buffer_buffered),hl ; update buffered marker
 	ld (_keyboard_buffer_input),hl
+	im 1
 	bcall(_NewLine)
+	im 2
 	jr _keyboard_interrupt_done
 
 _keyboard_interrupt_alpha:
@@ -126,7 +129,6 @@ _keyboard_interrupt_2nd:
 	res _keyboard_flag_shift,(hl)
 	jr _keyboard_interrupt_done
 
-_keyboard_interrupt_end:
 	
 
 ;_keyboard_buffer_start: .dw 0		; beginning of unread input
@@ -223,6 +225,8 @@ _keyboard_key_LUT:
  .db 0,0        ;37        skMode
  .db 0,0        ;38        skDel
  
+_keyboard_interrupt_end:
+
 ;_keyboard_flags: .db 0
 ;#define _keyboard_flag_alock 0
 ;#define _keyboard_flag_shift 1	; note alock and shift are mutually exclusive

@@ -56,6 +56,7 @@ _MyDispHL_print:
 ;; destroys: hl
 _MyPutS:
 	di
+	im 1
 	push iy
 	ld iy,flags
 	push bc
@@ -80,6 +81,7 @@ _MyPutS2:
 	ld a,b
 	pop bc
 	pop iy
+	im 2
 	ei
 	ret
 _MyPutS3: ; newline

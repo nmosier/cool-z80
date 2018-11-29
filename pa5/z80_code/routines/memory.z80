@@ -1,7 +1,7 @@
 _filename: .db "routines",0
 
 ;;; EQUATES ;;;
-_MEMORY_SIZE equ $2000 ; 8 KB
+_MEMORY_SIZE equ $4000 ; 8 KB
 
 _memory_create_appvar:
 	; first check if memory var already exists. If so, resize

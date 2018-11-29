@@ -4,8 +4,12 @@
 ;; Created by Nicholas Mosier on 10/02/2018
 
 ;; bootstrap code for cool program
+
 _start:
 	bcall(_ClrScrnFull)
+	
+	;; initialize flags
+	set appAutoScroll,(iy+appFlags)
 	
 	call _memory_initialize
 	ld hl,0
@@ -17,13 +21,16 @@ _start:
 	call Main_init
 	call Main.main
 	
+;	im 1
+	
 	ld hl,_success_msg
 	call _MyPutS
 
 	ld iy,flags
 	im 1	
-
-	ret
+	
+	;ret
+	bjump(_JForceCmdNoChar)
 	
 _success_msg:
 	.db "COOL program successfully executed\n",0
