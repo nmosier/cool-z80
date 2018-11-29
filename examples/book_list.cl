@@ -125,6 +125,7 @@ Class Main {
                 {
                     books <- (new Nil).cons(a_book).cons(an_article);
                     books.print_list();
+                    (new IO).in_string();
                 }
             )  -- end let an_article
         )  -- end let a_book

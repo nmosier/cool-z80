@@ -74,13 +74,13 @@ class Main inherits IO {
 		out_string("i2: ");
 		i2 <- in_int();
 		test_lt(i1, i2);
-		test_le(i1, i2);
-		test_eq(i1, i2);
-		test_neg(i1, i2);
-		in_string(); -- wait for input
-		test_not(i1, i2);
-		test_isvoid(obj1);
-		test_eqobj(obj1, obj2);
+		--test_le(i1, i2);
+		--test_eq(i1, i2);
+		-- test_neg(i1, i2);
+		--in_string(); -- wait for input
+		-- test_not(i1, i2);
+		-- test_isvoid(obj1);
+		-- test_eqobj(obj1, obj2);
 		in_string(); -- wait for input
 		self;
 	}};
