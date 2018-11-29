@@ -1319,15 +1319,27 @@ void CgenKlassTable::CgenInheritanceTree(std::ostream& os) const {
 }
 
 void CgenHeader(std::ostream& os) {
+	/*
 	os << ".org $9D93" << std::endl;
 	os << ".db $BB,$6D ; AsmPrgm" << std::endl;
 	os << std::endl;
+	*/
 	
-//	os << JP << "_start" << std::endl;
-	
-	std::string lib_files[] = {
+	std::string inc_files[] = {
 		"ti83plus.inc",
 		"cool.inc",
+		"app.inc"
+	};
+	for (std::string file : inc_files) {
+		emit_include(file, os);
+	}
+	
+	
+	os << "defpage(0)" << std::endl;
+	os << JP << "_start" << std::endl;
+	
+	
+	std::string lib_files[] = {
 		"boot.z80",
 		"memory.z80",
 		"display.z80",
@@ -1342,6 +1354,8 @@ void CgenHeader(std::ostream& os) {
 	for (std::string file : lib_files) {
 		emit_include(file, os);
 	}
+	
+	// for Flash apps: defpage
 }
 
 void CgenKlassTable::CodeGen(std::ostream& os) const {
