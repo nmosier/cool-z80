@@ -50,6 +50,9 @@ limitations under the License.
 #define WORD_SIZE    2
 #define LOG_WORD_SIZE 2     // For logical shifts
 
+// File names
+#define DISPTAB_PATH         "disptab.z80"
+
 // Global names
 #define CLASSNAMETAB         "class_nameTab"
 #define CLASSOBJTAB          "class_objTab"
@@ -61,6 +64,7 @@ limitations under the License.
 
 // Naming conventions
 #define DISPTAB_SUFFIX       "_dispTab"
+#define DISPENT_PREFIX       "_dispTab."
 #define METHOD_SEP           "."
 #define CLASSINIT_SUFFIX     "_init"
 #define PROTOBJ_SUFFIX       "_protObj"
@@ -98,6 +102,7 @@ limitations under the License.
 
 // PREPROCESSOR
 #define INCLUDE	"#include\t"
+#define DEFINE    "#define\t"
 
 //
 // register names

@@ -44,6 +44,7 @@ limitations under the License.
 #include "ast_consumer.h"
 #include "register.h"
 
+#include <exception>
 #include <list>
 #include <set>
 #include <map>
@@ -62,7 +63,6 @@ extern enum Memmgr_Test { GC_NORMAL, GC_TEST } cgen_Memmgr_Test;
 extern enum Memmgr_Debug { GC_QUICK, GC_DEBUG } cgen_Memmgr_Debug;
 
 
-
 namespace cool {
 
 /**
@@ -70,7 +70,6 @@ namespace cool {
  */
 extern bool gCgenDebug;
 
-// all values in WORDS, not BYTES
 struct CgenLayout {
 	struct ActivationRecord {
 		static const int8_t callee_add_size = -2 * WORD_SIZE;
