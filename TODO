@@ -1,7 +1,8 @@
 // TO-DO list for z80-cool
 
-0. handle page-swapping
-   * use bcall() for now -- maybe reimplement later.
+0. handle page-swapping: use bcall() for now -- maybe reimplement later.
+   (i) count instruction bytes
+   (ii) add "page" entry for absolute addresses
 1. implement garbage collection
    (a) propogate GC tag in Object.copy()
 2. implement big arithmetic
