@@ -7,10 +7,11 @@ purpose, without fee, and without written agreement is hereby granted,
 provided that the above copyright notice and the following two
 paragraphs appear in all copies of this software.
 
-IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
-DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES ARISING OUT
-OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF
-CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY
+FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES
+ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF
+THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
 
 THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
 INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
@@ -34,16 +35,16 @@ limitations under the License.
 */
 
 #include <iostream>
+#include <fstream>
+#include <exception>
 #include <algorithm>
 #include <assert.h>
-#include "cgen.h"
-#include "cgen_routines.h"
-
 #include <map>
 #include <cmath>
 #include <deque>
-#include <exception>
 #include <set>
+#include "cgen.h"
+#include "cgen_routines.h"
 
 using namespace cool;
 
@@ -114,7 +115,7 @@ void emit_load(const RegisterPointer& dst, const LabelValue& src, std::ostream& 
 }
 void emit_load(const RegisterValue& dst, const RegisterValue& src, std::ostream& os) {
 	assert (dst.size() == src.size());
-	assert (!src.reg() || *src.reg() != SP);
+   assert (!src.reg() || *src.reg() != SP);
 
 	if (dst.size() == 1) {
 		os << LD << dst << "," << src << std::endl;
@@ -258,8 +259,8 @@ static void emit_add(const RegisterValue& dst, const MemoryValue& src, std::ostr
 	if (src.loc().kind() == MemoryLocation::Kind::PTR) assert (src.reg() && *src.reg() == rHL);
 	else if (src.loc().kind() == MemoryLocation::Kind::PTR_OFF) ;
 	else {
-	std::cerr << "can only add (hl) or (ix+*) or (iy+*) to ACC" << std::endl;
-	throw "can only add (hl) or (ix+*) or (iy+*) to ACC";
+		std::cerr << "can only add (hl) or (ix+*) or (iy+*) to ACC" << std::endl;
+		throw "can only add (hl) or (ix+*) or (iy+*) to ACC";
 	}
 	s << ADD << dst << "," << src << std::endl;
 }
@@ -1030,6 +1031,7 @@ void CgenKlassTable::CgenGlobalText(std::ostream& os) const {
 }
 
 // modified 8/2018
+// NEW APPROACH: GENEREATE IN SEPARATE .asm FILE
 void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t) {
   // add overridden methods to method inheritance table
   for (auto features_it = klass()->features_begin(); features_it != klass()->features_end(); features_it++) {
@@ -1046,16 +1048,28 @@ void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, Metho
   for (std::pair<Symbol*,AbsoluteAddress*> p : table)
     {  ordered_table.push_back(p); }
 
-	// sort table
+	/* sort table by offsets of entries from dispatch table label */
 	std::sort(ordered_table.begin(), ordered_table.end(), [](const auto lhs, const auto rhs){
 		assert (lhs.second && rhs.second);
 		return *lhs.second < *rhs.second;
 	});
 
+	/* generate dispatch table for class */
   os << klass()->name() << DISPTAB_SUFFIX << LABEL;
   for (auto method_pair : ordered_table) {
   	Symbol* method_name = method_pair.first;
-  	os << DW << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl;
+  	
+  	std::string method_label_str = std::string(inheritance_t[method_name]->value()) 
+  										+ std::string(METHOD_SEP) + std::string(method_name->value());
+  	std::string dispent_label_str = std::string(DISPENT_PREFIX) + method_label_str;
+  	LabelValue method_label(method_label_str);
+  	LabelValue dispent_label(dispent_label_str);
+  	
+  	/* define bcall handle */
+  	os << DEFINE << dispent_label << "\t" << "$-$" << method_label << std::endl;
+  //	os << DW << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl; // method label
+   os << DW << method_label << std::endl;
+//   	os << DB << -1 << std::endl; // method page (placeholder -- fill in pass 2)
   }
 
   for (CgenNode* child : children_)
@@ -1319,26 +1333,17 @@ void CgenKlassTable::CgenInheritanceTree(std::ostream& os) const {
 }
 
 void CgenHeader(std::ostream& os) {
-	/*
-	os << ".org $9D93" << std::endl;
-	os << ".db $BB,$6D ; AsmPrgm" << std::endl;
-	os << std::endl;
-	*/
+	/* os << ".org $9D93" << std::endl;
+    * os << ".db $BB,$6D ; AsmPrgm" << std::endl;
+    * os << std::endl;
+    */
 	
 	std::string inc_files[] = {
 		"ti83plus.inc",
 		"cool.inc",
 		"app.inc"
 	};
-	for (std::string file : inc_files) {
-		emit_include(file, os);
-	}
-	
-	
-	os << "defpage(0)" << std::endl;
-	os << JP << "_start" << std::endl;
-	
-	
+
 	std::string lib_files[] = {
 		"boot.z80",
 		"memory.z80",
@@ -1351,11 +1356,28 @@ void CgenHeader(std::ostream& os) {
 		"String.z80"
 	};
 
+   std::string aux_files[] = {
+      DISPTAB_PATH
+   };
+
+   /* include .inc files */
+	for (std::string file : inc_files) {
+		emit_include(file, os);
+	}
+		
+   /* define first page */
+	os << "defpage(0)" << std::endl;
+	os << JP << "_start" << std::endl;
+
+   /* include library files */
 	for (std::string file : lib_files) {
 		emit_include(file, os);
 	}
-	
-	// for Flash apps: defpage
+
+   /* include auxiliary files */
+   for (std::string file : aux_files) {
+      emit_include(file, os);
+   }
 }
 
 void CgenKlassTable::CodeGen(std::ostream& os) const {
@@ -1365,8 +1387,8 @@ void CgenKlassTable::CodeGen(std::ostream& os) const {
 //  CgenSelectGC(os);
   CgenConstants(os);
   
-  CgenPrototypeObjects(os);
-  CgenDispatchTables(os);
+  CgenPrototypeObjects(os);  
+
   CgenClassObjTab(os);
   CgenClassNameTab(os);
   CgenInheritanceTree(os);
@@ -1376,6 +1398,18 @@ void CgenKlassTable::CodeGen(std::ostream& os) const {
   
   CgenClassInits(os);
   CgenClassMethods(os);
+
+  /* generate dispatch tables to separate file */
+  std::filebuf disptab_fb;
+  if (disptab_fb.open(DISPTAB_PATH, std::ios::out) == NULL) {
+     perror("std::filebuf.open");
+     throw std::exception();
+  }
+  std::ostream disptab_os(&disptab_fb);
+  CgenDispatchTables(disptab_os);
+  disptab_os.flush();
+  disptab_fb.close();
+
 }
 
 
@@ -2063,7 +2097,7 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   // call static method on given class
   os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
   
-  for (Expression* expr : *actuals_) {
+  for (Expression *expr : *actuals_) {
 	emit_pop(rDE, os); // pop off args
   }
   
