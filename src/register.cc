@@ -1,6 +1,7 @@
 #include "register.h"
 #include <iostream>
 #include <functional>
+#include "utilities.h"
 
 namespace cool {
 
@@ -67,7 +68,8 @@ AbsoluteAddress &AbsoluteAddress::advanced(int16_t d) const {
 
 bool operator<(const AbsoluteAddress& lhs, const AbsoluteAddress& rhs) {
 	if (lhs.label_ != rhs.label_) {
-		std::cerr << "different labels cannot be compared." << std::endl;
+		std::cerr << "different labels " << lhs.label_ << " and " << rhs.label_ << " cannot be compared." << std::endl;
+      print_backtrace();
 		throw "different labels cannot be compared.";
 	}
 	return lhs.offset_ < rhs.offset_;

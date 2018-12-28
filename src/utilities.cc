@@ -37,6 +37,7 @@ limitations under the License.
 #include <iomanip>
 #include <cassert>
 #include <cctype>
+#include <execinfo.h>
 
 #include "cool_parse.h"  // Defines tokens
 #include "ast.h"
@@ -193,4 +194,21 @@ bool operator==(const cool::unordered_pair<T>& lhs, const cool::unordered_pair<T
 template <class T>
 bool operator!=(const cool::unordered_pair<T>& lhs, const cool::unordered_pair<T>& rhs) {
 	return !(lhs == rhs);
+}
+
+namespace cool {
+#define BACKTRACE_MAX 128
+void print_backtrace() {
+   void *array[BACKTRACE_MAX];
+   int size;
+   char **syms;
+ 
+   size = backtrace(array, BACKTRACE_MAX);
+   syms = backtrace_symbols(array, size);
+
+   for (int i = 0; i < size; ++i) {
+      std::clog << syms[i] << std::endl;
+   }
+}
+
 }
