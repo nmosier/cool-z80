@@ -12,4 +12,4 @@ SPASM_MODE=
 
 .PHONY: clean
 clean:
-	rm -f *.8xp *.s *.8xk
+	rm -f *.8xp *.s *.8xk *.lst *.bin *.lab
