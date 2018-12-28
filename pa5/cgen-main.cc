@@ -39,11 +39,13 @@ limitations under the License.
 
 #include "ast.h"
 #include "cgen.h"
+#include "page.h"
 
 // Lexer and parser associated variables
 extern int yy_flex_debug;                // Control Flex debugging (set to 1 to turn on)
 std::istream *gInputStream = &std::cin;  // istream being lexed/parsed
 const char *gCurrFilename = "<stdin>";   // Path to current file being lexed/parsed
+//std::string gOutFilename;                // Path to output (assembly) file being generated
 extern int ast_yydebug;                  // Control Bison debugging (set to 1 to turn on)
 extern int ast_yyparse(void);            // Entry point to the AST parser
 extern cool::Program *gASTRoot;          // AST produced by parser
@@ -122,16 +124,34 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (!out_filename.empty()) {
-    std::ofstream output_stream(out_filename);
-    if (!output_stream) {
-      std::cerr << "Cannot open output file " << out_filename << std::endl;
-      exit(1);
-    }
-    Cgen(gASTRoot, output_stream);
-  } else {
-    Cgen(gASTRoot, std::cout);
+  if (out_filename.empty()) {
+     /* now unsupported */
+     std::cerr << argv[0] << ": writing assembly output to <stdout> is now unsupported."
+               << std::endl;
+     exit(1);
+
+     //     gOutputFilename = std::string("<stdout>");
+     Cgen(gASTRoot, std::cout);
+  }
+  
+  //gOutputFilename = out_filename;
+  std::ofstream output_stream(out_filename);
+  if (!output_stream) {
+     std::cerr << "Cannot open output file " << out_filename << std::endl;
+     exit(1);
   }
 
+  /* code generation: 1st pass (code gen) */
+  Cgen(gASTRoot, output_stream);
+
+  /* code generation: 2nd pass (page alloc) */
+  
+  if (cool::PageEmitAssemblySymTab(out_filename.c_str(), "z80_code/routines") < 0) {
+     exit(2);
+  }
+  if (cool::PageLoadMethodAddresses("simple.lab") < 0) {
+     exit(3);
+  }
+  
   return 0;
 }
