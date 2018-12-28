@@ -1,3 +1,5 @@
+	.nolist
+
 #define _string_objdata_offset 2*4
 #define _string_basesize 2*4
 #define _int_objdata_offset 2*3
@@ -42,3 +44,5 @@
 #macro low(x)
 	x & 0xFF
 #endmacro
+	
+	.list
