@@ -113,4 +113,7 @@ bool operator==(const unordered_pair<T>& lhs, const unordered_pair<T>& rhs);
 template <typename T>
 bool operator!=(const unordered_pair<T>& lhs, const unordered_pair<T>& rhs);
 
+
+ void print_backtrace();
+
 } // namespace cool

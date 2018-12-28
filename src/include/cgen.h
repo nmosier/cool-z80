@@ -78,7 +78,7 @@ struct CgenLayout {
 		static const int8_t return_value = 2 * WORD_SIZE;
 		static const int8_t arguments_end = 3 * WORD_SIZE; // one past end
 	};
-	
+   
 	struct Object {
 		static const int8_t attribute_offset = 3 * WORD_SIZE;
 	};
@@ -93,20 +93,47 @@ struct CgenLayout {
  * @param program Program AST node
  * @param os std::ostream to write generated code to
  */
-void Cgen(Program* program, std::ostream& os);
-
+ void Cgen(Program* program, std::ostream& os);
+ 
 // Forward declarations
-class CgenKlassTable;
+ class CgenKlassTable;
+ class DispatchEntry;
+ class DispatchTable;
+ // typedef std::pair<AbsoluteAddress*,int> DispatchEntry;
+ typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
 
-class DispatchTable;
-typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
+ class DispatchEntry {
+ public:
+    AbsoluteAddress *loc_;
+    unsigned int page_;
+    unsigned int addr_;
+    
+ DispatchEntry(): loc_(NULL), page_(0), addr_(0) {}
+ DispatchEntry(AbsoluteAddress *loc): loc_(loc), page_(0), addr_(0) {}
 
-class DispatchTable: public std::unordered_map<Symbol*,AbsoluteAddress*> {
+ DispatchEntry(AbsoluteAddress *loc, unsigned int page, unsigned int addr): 
+    loc_(loc), page_(page), addr_(addr) {}
+    
+ DispatchEntry(const DispatchEntry& other): 
+    loc_(new AbsoluteAddress(*other.loc_)), page_(other.page_), addr_(other.addr_) {}
+
+    DispatchEntry& operator=(const DispatchEntry& other) {
+       loc_ = new AbsoluteAddress(*other.loc_);
+       page_ = other.page_;
+       addr_ = other.addr_;
+       return *this;
+    }
+
+    ~DispatchEntry() { delete loc_; }
+ };
+
+class DispatchTable: public std::unordered_map<Symbol*,DispatchEntry> {
 public:
 	DispatchTable& operator=(const DispatchTable &other) {
 		if (this != &other) {
-			for (std::pair<Symbol*,AbsoluteAddress*> p : other) {
-				(*this)[p.first] = new AbsoluteAddress(*p.second);
+			for (std::pair<Symbol*,DispatchEntry> p : other) {
+            //DispatchEntry newentry(new AbsoluteAddress(*p.second.first), p.second.second);
+				(*this)[p.first] = p.second;//newentry;
 			}
 		}
 		

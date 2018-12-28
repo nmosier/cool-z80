@@ -33,6 +33,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#ifndef __EMIT_H
+#define __EMIT_H
+
+#include <fstream>
+#include <string>
+#include "register.h"
+#include "stringtab.h"
+
+
 ///////////////////////////////////////////////////////////////////////
 //
 //  Assembly Code Naming Conventions:
@@ -77,10 +86,10 @@ limitations under the License.
 #define EMPTYSLOT            0
 #define LABEL                ":\n"
 
-#define STRINGNAME (char *) "String"
-#define INTNAME    (char *) "Int"
-#define BOOLNAME   (char *) "Bool"
-#define MAINNAME   (char *) "Main"
+#define STRINGNAME ((char *) "String")
+#define INTNAME    ((char *) "Int")
+#define BOOLNAME   ((char *) "Bool")
+#define MAINNAME   ((char *) "Main")
 
 //
 // information about object headers
@@ -160,3 +169,126 @@ limitations under the License.
 #define AND	 "\tand\t"
 #define OR   "\tor\t"
 #define XOR  "\txor\t"
+
+
+namespace cool {
+/* function prototypes */
+void emit_include(const std::string& filename, std::ostream& os);
+
+template <typename T, typename U>
+void emit_load(const RegisterValue& dst, const ImmediateValue<T,U>& src, std::ostream& os) {
+	assert (dst.size() == src.size());
+	os << LD << dst << "," << src << std::endl;
+}
+
+template <typename T, typename U>
+void emit_load(const RegisterPointer& dst, const ImmediateValue<T,U>& src, std::ostream& os) {
+	switch (src.size()) {
+	case 1:
+		os << LD << dst << "," << src << std::endl;
+		break;
+	case 2:
+		os << LD << dst << "," << src.low() << std::endl;
+		os << INC << dst.reg() << std::endl;
+		os << LD << dst << "," << src.high() << std::endl;
+		os << DEC << dst.reg() << std::endl;
+		break;
+	default:
+		std::string msg = std::string("ImmediateValue (src)must be of size 1 or 2, but is of size ")
+                        + std::string(src.size());
+		std::cerr << msg << std::endl;
+		throw msg;
+	}
+}
+
+void emit_load(const RegisterValue& dst, const LabelValue& src, std::ostream& os);
+void emit_load(const RegisterPointer& dst, const LabelValue& src, std::ostream& os);
+void emit_load(const RegisterValue& dst, const RegisterValue& src, std::ostream& os);
+void emit_load(const MemoryValue& dst, const RegisterValue& src, std::ostream& os);
+void emit_load(const RegisterValue& dst, const MemoryValue& src, std::ostream& os);
+void emit_neg(const Register& dst, std::ostream& s);
+void emit_cpl(const Register& dst, std::ostream& s);
+void emit_add(const RegisterValue& dst, const RegisterValue& src, std::ostream& s);
+void emit_add(const RegisterValue& dst, const Immediate8& src, std::ostream& s);
+void emit_add(const RegisterValue& dst, const MemoryValue& src, std::ostream& s);
+void emit_adc(const RegisterValue& dst, const RegisterValue& src, std::ostream& s);
+void emit_adc(const RegisterValue& dst, const Immediate8& src, std::ostream& s);
+void emit_adc(const RegisterValue& dst, const MemoryValue& src, std::ostream& s);
+bool compatible_SUB(const Value& src);;
+void emit_sub(const Value& src, std::ostream& s);
+void emit_inc(const Register& dst, std::ostream& s);
+void emit_dec(const Register& dst, std::ostream& s);
+void emit_sla(const Register8& dst, std::ostream& s);
+void emit_sra(const Register8& dst, std::ostream& s);
+void emit_srl(const Register8& dst, std::ostream& s);
+void emit_jr(const AbsoluteAddress& loc, Flag flag, std::ostream& s);
+void emit_jr(int label_number, Flag flag, std::ostream& s);
+bool compatible_JP(const MemoryLocation& dst);
+void emit_jp(const MemoryLocation& loc, Flag flag, std::ostream& s);
+void emit_jp(int label, Flag flag, std::ostream& s);
+void emit_return(Flag flag, std::ostream& s);
+void emit_call(const AbsoluteAddress& addr, Flag flag, std::ostream& s);
+void emit_copy(std::ostream& s);
+void emit_gc_assign(std::ostream& s);
+void emit_equality_test(std::ostream& s);
+void emit_case_abort(std::ostream& s);
+void emit_case_abort2(std::ostream& s);
+void emit_dispatch_abort(std::ostream& s);
+std::string label_ref(int l);
+void emit_label_ref(int l, std::ostream &s);
+void emit_label_def(int l, std::ostream &s);
+bool compatible_PUSH(const Register& src);
+void emit_push(const Register& src, std::ostream& s);
+bool compatible_POP(const Register& dst);
+void emit_pop(const Register& dst, std::ostream& s);
+void emit_cp(const Register8& src, std::ostream& s);
+void emit_cp(const RegisterPointer& src, std::ostream& s);
+void emit_or(const Register8& src, std::ostream& s);
+void emit_or(const RegisterPointer& src, std::ostream& s);
+void emit_fetch_int(const RegisterValue& dst, const MemoryValue& src, std::ostream& s);
+void emit_store_int(const RegisterValue& src, const MemoryValue& dst, std::ostream& s);
+void emit_fetch_bool(const RegisterValue& dst, const MemoryValue& src, std::ostream& s);
+void emit_store_bool(const RegisterValue& src, const MemoryValue& dst, std::ostream& s);
+ void emit_protobj_ref(Symbol* sym, std::ostream& os);
+ void emit_disptable_ref(Symbol* sym, std::ostream& os);
+ void emit_method_ref(Symbol* classname, Symbol* methodname, std::ostream& os);
+ void emit_init_ref(Symbol* sym, std::ostream& os);
+ std::string get_init_ref(Symbol* sym);
+ void emit_init(Symbol* classname, std::ostream& os);
+
+ std::ostream& CgenRef(std::ostream& os, const StringEntry* entry);
+ std::string CgenRef(const StringEntry* entry);
+ std::ostream& CgenRef(std::ostream& os, const Int16Entry* entry);
+ std::string CgenRef(const Int16Entry* entry);
+ std::ostream& CgenRef(std::ostream& os, bool entry);
+ std::string CgenRef(bool entry);
+ std::ostream& CgenDef(std::ostream& os, const StringEntry* entry, std::size_t class_tag);
+ std::ostream& CgenDef(std::ostream& os, const Int16Entry* entry, std::size_t class_tag);
+ std::ostream& CgenDef(std::ostream& os, bool entry, std::size_t class_tag);
+
+/**
+ * Generate definitions for the constants in a SymbolTable
+ * @param os std::ostream to write generated code to
+ * @param table SymbolTable of constants, e.g. gIntTable
+ * @param class_tag Class tag for the type of constant being generated
+ * @return os
+ */
+template <class Elem>
+std::ostream& CgenDef(std::ostream& os, const SymbolTable<Elem>& table, size_t class_tag) {
+  std::vector<Elem*> values;
+  for (const auto & value : table) {
+    values.push_back(value.second.get());
+  }
+  // Reverse sort by index to maintain backward compatibility with cool
+  std::sort(values.begin(), values.end(), [](const Elem* lhs, const Elem* rhs) {
+    return lhs->id() > rhs->id();
+  });
+  for (const auto & value : values) {
+    CgenDef(os, value, class_tag);
+  }
+  return os;
+}
+ 
+}
+
+#endif

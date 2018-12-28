@@ -34,6 +34,7 @@ limitations under the License.
 */
 
 extern void emit_string_constant(unsigned char *str);
+void emit_string_constant(std::ostream& str, const char* s);
 
 extern void fatal_error(char *, ...);
 
