@@ -52,7 +52,6 @@ _dispatch_abort:
 ;; PARAMS:
 ;;  * hl: object that didn't match branches
 _case_abort:
-;; class_nameTab
 	ld e,(hl)
 	inc hl
 	ld d,(hl)
