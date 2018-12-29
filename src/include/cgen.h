@@ -98,48 +98,44 @@ struct CgenLayout {
 // Forward declarations
  class CgenKlassTable;
  class DispatchEntry;
- class DispatchTable;
- // typedef std::pair<AbsoluteAddress*,int> DispatchEntry;
+ typedef std::unordered_map<Symbol*,DispatchEntry> DispatchTable;
  typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
 
  class DispatchEntry {
  public:
-    AbsoluteAddress *loc_;
+    AbsoluteAddress loc_;
     unsigned int page_;
     unsigned int addr_;
+    const Symbol *method_;
+    const Symbol *klass_;
     
- DispatchEntry(): loc_(NULL), page_(0), addr_(0) {}
- DispatchEntry(AbsoluteAddress *loc): loc_(loc), page_(0), addr_(0) {}
+ DispatchEntry(): loc_(), page_(0), addr_(0), method_(NULL), klass_(NULL) {}
+ DispatchEntry(const AbsoluteAddress& loc, const Symbol *method, const Symbol *klass):
+    loc_(loc), page_(0), addr_(0), method_(method), klass_(klass) {}
 
- DispatchEntry(AbsoluteAddress *loc, unsigned int page, unsigned int addr): 
-    loc_(loc), page_(page), addr_(addr) {}
-    
- DispatchEntry(const DispatchEntry& other): 
-    loc_(new AbsoluteAddress(*other.loc_)), page_(other.page_), addr_(other.addr_) {}
+ DispatchEntry(const AbsoluteAddress& loc, unsigned int page, unsigned int addr, 
+               const Symbol *method, const Symbol *klass):
+    loc_(loc), page_(page), addr_(addr), method_(method), klass_(klass) {}
 
-    DispatchEntry& operator=(const DispatchEntry& other) {
-       loc_ = new AbsoluteAddress(*other.loc_);
-       page_ = other.page_;
-       addr_ = other.addr_;
-       return *this;
-    }
+    friend std::ostream& operator<<(std::ostream& os, const DispatchEntry& dispent);
 
-    ~DispatchEntry() { delete loc_; }
  };
 
+
+ /*
 class DispatchTable: public std::unordered_map<Symbol*,DispatchEntry> {
 public:
 	DispatchTable& operator=(const DispatchTable &other) {
 		if (this != &other) {
 			for (std::pair<Symbol*,DispatchEntry> p : other) {
-            //DispatchEntry newentry(new AbsoluteAddress(*p.second.first), p.second.second);
-				(*this)[p.first] = p.second;//newentry;
+				(*this)[p.first] = p.second;
 			}
 		}
 		
 		return *this;
 	}	
 };
+*/
 
 class VariableEnvironment {
  public:
@@ -210,7 +206,8 @@ class CgenNode : public InheritanceNode<CgenNode> {
   int objectSize_;
   
   void CreateAttrVarEnv(int next_offset);
-  void CreateDispatchTables(DispatchTables& tables, int next_offset);
+  void CreateDispatchTables(DispatchTables& tables, MethodInheritanceTable inheritance_t,
+                            int next_offset);
   
   void EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t);
   void EmitPrototypeObject(std::ostream& os);

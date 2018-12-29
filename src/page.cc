@@ -26,7 +26,7 @@ namespace cool {
       char cmd[256];
 
       /* emit symbol table using spasm */
-      sprintf(cmd, "spasm -L \"%s\" -I \"%s\"", asm_path, lib_dir);
+      sprintf(cmd, "spasm -DBREAK=\"di \\ halt \\ ei\" -L \"%s\" -I \"%s\"", asm_path, lib_dir);
 
       if (system(cmd)) {
          perror("system");
@@ -73,7 +73,7 @@ namespace cool {
          for (auto p : disptab) {
             Symbol *method = p.first;
             DispatchEntry entry = p.second;
-            AbsoluteAddress *loc = entry.loc_;
+            AbsoluteAddress loc = entry.loc_;
          }
       }
 

@@ -120,7 +120,7 @@ class AbsoluteAddress: public MemoryLocation {
   friend class CgenNode;
  private:
   std::string label_;
-  const int16_t offset_;
+  int16_t offset_;
 };
 
 
