@@ -146,14 +146,18 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
       std::string dispent_label_str = std::string(DISPENT_PREFIX) + full_method_label_str;
       LabelValue full_method_label(full_method_label_str);
       LabelValue dispent_label(dispent_label_str);
-
+      
       /* define bcall handle */
-      //os << DEFINE << dispent_label << "\t" << "$-$" << full_method_label << std::endl;
-      os << DW << full_method_label << std::endl;         
+      os << DEFINE << DISPENT_PREFIX << full_method_label << "\t" << "$-4000h" << std::endl;
 
+      /* emit dispatch table entry data */
+      os << DW << full_method_label << std::endl;         
+      os << DB << dispent.page_ << std::endl;
+      
       return os;
    }
-
+   
+   
    
    void DispatchTable::print_entries() const {
       for (auto p : *this) {
@@ -216,7 +220,7 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
                Symbol *method_klassname = inheritance_t[method->name()];
                DispatchEntry entry(loc, 0, 0, method->name(), method_klassname);
                tables[klass()->name()][method->name()] = entry;
-               next_offset += WORD_SIZE;
+               next_offset += 1*WORD_SIZE + 1*BYTE_SIZE;
             } else {
                /* overridden method -- update DispatchEntry */
                DispatchEntry& dispent = tables[klass()->name()][method->name()];
@@ -328,17 +332,6 @@ void CgenKlassTable::CgenGlobalText(std::ostream& os) const {
 // modified 8/2018
 // NEW APPROACH: GENEREATE IN SEPARATE .asm FILE
 void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t) {
-   // add overridden methods to method inheritance table
-   /*
-   for (auto features_it = klass()->features_begin(); features_it != klass()->features_end(); features_it++) {
-    if ((*features_it)->method()) {
-      Method* method = (Method*) (*features_it);
-      Symbol* name = method->name();
-      inheritance_t[name] = klass()->name();
-    }
-  }
-   */
-
   DispatchTable& table = tables[klass()->name()];
   
   std::vector<std::pair<Symbol*,DispatchEntry>> ordered_table;
@@ -354,21 +347,6 @@ void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, Metho
 	/* generate dispatch table for class */
   os << klass()->name() << DISPTAB_SUFFIX << LABEL;
   for (auto method_pair : ordered_table) {
-     /*
-  	Symbol* method_name = method_pair.first;
-  	
-  	std::string method_label_str = std::string(inheritance_t[method_name]->value()) 
-      + std::string(METHOD_SEP) + std::string(method_name->value());
-  	std::string dispent_label_str = std::string(DISPENT_PREFIX) + method_label_str;
-  	LabelValue method_label(method_label_str);
-  	LabelValue dispent_label(dispent_label_str);
-  	
-
-  	os << DEFINE << dispent_label << "\t" << "$-$" << method_label << std::endl;
-  //	os << DW << inheritance_t[method_name] << METHOD_SEP << method_name << std::endl; // method label
-   os << DW << method_label << std::endl;
-   //os << DB << 
-   */
      DispatchEntry& dispent = method_pair.second;
      os << dispent;
   }
@@ -1395,10 +1373,15 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_jr(dispatch_abort, Flags::Z, os); // abort if receiver is void
   
   // call static method on given class
-  os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
+  //os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
+  std::string dispatch_str = std::string(DISPENT_PREFIX) + dispatch_type_->value() 
+     + std::string(METHOD_SEP) + name_->value();
+  AbsoluteAddress dispatch_addr(dispatch_str);
+  emit_bcall(dispatch_addr, os); // bcall method
+
   
   for (Expression *expr : *actuals_) {
-	emit_pop(rDE, os); // pop off args
+     emit_pop(rDE, os); // pop off args
   }
   
   emit_jr(dispatch_end, nullptr, os);
@@ -1427,7 +1410,8 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_or(rL, os);
   emit_jr(dispatch_abort, Flags::Z, os); // if receiver is void, call dispatch_abort
   
-  emit_load(RegisterValue(rDE), Immediate16(static_cast<int16_t>(DISPTABLE_OFFSET * WORD_SIZE)), os);
+  emit_load(RegisterValue(rDE), Immediate16(static_cast<int16_t>(DISPTABLE_OFFSET * WORD_SIZE)),
+            os);
   os << EX << rDE << "," << rHL << std::endl;
   emit_add(ARG0, rDE, os); // ARG0 -> pointer to disptable for class
   emit_load(RegisterValue(rBC), RegisterPointer(ARG0), os); // rBC = address of disptable

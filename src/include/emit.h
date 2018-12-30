@@ -57,6 +57,7 @@ limitations under the License.
 ///////////////////////////////////////////////////////////////////////
 
 #define WORD_SIZE    2
+#define BYTE_SIZE    1
 #define LOG_WORD_SIZE 2     // For logical shifts
 
 // File names
@@ -133,6 +134,7 @@ limitations under the License.
 // Opcodes
 //
 #define CALL "\tcall\t"
+#define BCALL "\tbcall\t"
 #define JR   "\tjr\t"
 #define JP   "\tjp\t"
 #define RET	 "\tret\t"
@@ -228,6 +230,7 @@ void emit_jp(const MemoryLocation& loc, Flag flag, std::ostream& s);
 void emit_jp(int label, Flag flag, std::ostream& s);
 void emit_return(Flag flag, std::ostream& s);
 void emit_call(const AbsoluteAddress& addr, Flag flag, std::ostream& s);
+ void emit_bcall(const AbsoluteAddress& addr, std::ostream& s);
 void emit_copy(std::ostream& s);
 void emit_gc_assign(std::ostream& s);
 void emit_equality_test(std::ostream& s);

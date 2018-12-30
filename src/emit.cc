@@ -339,6 +339,10 @@ void emit_call(const AbsoluteAddress& addr, Flag flag, std::ostream& s) {
 	s << addr << std::endl;
 }
 
+   void emit_bcall(const AbsoluteAddress& addr, std::ostream& s) {
+      s << BCALL << "(" << addr << ")" << std::endl;
+   }
+
 
 void emit_copy(std::ostream& s) {
 	AbsoluteAddress addr("Object.copy");
