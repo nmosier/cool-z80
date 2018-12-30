@@ -154,6 +154,25 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
       return os;
    }
 
+   
+   void DispatchTable::print_entries() const {
+      for (auto p : *this) {
+         const DispatchEntry& dispent = p.second;
+         std::clog << "\t" << dispent.klass_->value() << METHOD_SEP << dispent.method_->value() 
+                   << "\tpage " << dispent.page_ << "\t$" << std::hex
+                   << dispent.addr_ << std::dec << std::endl;
+      }
+   }
+
+   void DispatchTables::print_entries() const {
+      for (auto p : *this) {
+         Symbol *name = p.first;
+         const DispatchTable& disptab = p.second;
+         std::clog << name->value() << ":" << std::endl;
+         disptab.print_entries();
+      }
+   }
+
 // CreateDispatchTables
 //  -creates a table of dispatch tables (one per class)
 //   with each table mapping a method name to a memory location
@@ -188,7 +207,7 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
            feature != klass()->features_end(); ++feature) {
          if ((*feature)->method()) {
             Method* method = (Method*) (*feature);
- //            if (tables[klass()->name()].find(method->name()) == tables[klass()->name()].end()) {
+            if (tables[klass()->name()].find(method->name()) == tables[klass()->name()].end()) {
                std::string dispTab_label = klass()->name()->value();
                dispTab_label.append(DISPTAB_SUFFIX);
                
@@ -198,10 +217,11 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
                DispatchEntry entry(loc, 0, 0, method->name(), method_klassname);
                tables[klass()->name()][method->name()] = entry;
                next_offset += WORD_SIZE;
- //            } else {
+            } else {
                /* overridden method -- update DispatchEntry */
-               //tables[klass()->name()][method->name()].dispent 
- //            }
+               DispatchEntry& dispent = tables[klass()->name()][method->name()];
+               dispent.klass_ = this->klass()->name();
+            }
          }
       }
       
@@ -327,7 +347,7 @@ void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, Metho
   }
 
 	/* sort table by offsets of entries from dispatch table label */
-	std::sort(ordered_table.begin(), ordered_table.end(), [](const auto lhs, const auto rhs){
+	std::sort(ordered_table.begin(), ordered_table.end(), [](const auto& lhs, const auto& rhs){
       return lhs.second.loc_ < rhs.second.loc_; // compare absolute addresses
 	});
 

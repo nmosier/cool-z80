@@ -7,16 +7,10 @@
 #include <unistd.h>
 #include <iostream>
 #include <fstream>
+#include <numeric>
 #include "cgen.h"
+#include "page.h"
 
-#define PAGE_CMDLEN 256
-#define SYMTAB_MAXLEN 256 // max length of line
-#define SYM_MAXLEN 128
-#define ESTAT_FAILED 1
-enum {
-   EXITSTAT_SUCCESS = 0,
-   EXITSTAT_FAILURE
-};
 
 namespace cool {
    extern DispatchTables gCgenDispatchTables;
@@ -36,8 +30,10 @@ namespace cool {
       return 0;
    }
 
-   int PageLoadMethodAddresses(const char *symtab_path) {
-      std::unordered_map<std::string,unsigned int> symtab;
+   int PageLoadMethodAddresses(const char *symtab_path/*, DispatchTables& disptabs*/) {
+      DispatchTables& disptabs = gCgenDispatchTables;
+      typedef std::unordered_map<std::string,unsigned int> AsmSymbolTable;
+      AsmSymbolTable symtab;
       FILE *symtabf;
       int retv;
 
@@ -66,14 +62,33 @@ namespace cool {
          symtab[sym2] = addr;
       }
 
-      for (auto p : gCgenDispatchTables) {
-         DispatchTable disptab = p.second;
-         Symbol *klass = p.first;
-         
-         for (auto p : disptab) {
-            Symbol *method = p.first;
-            DispatchEntry entry = p.second;
-            AbsoluteAddress loc = entry.loc_;
+      /* set addresses in dispatch table entries */
+      for (std::pair<Symbol*,DispatchTable&> p : disptabs) {
+         DispatchTable& disptab = p.second;
+
+         for (std::pair<Symbol*,DispatchEntry&> p : disptab) {
+            DispatchEntry& entry = p.second;
+            const Symbol *klass = entry.klass_;
+            const Symbol *method = entry.method_;
+            std::string full_method = klass->value() + std::string(METHOD_SEP) 
+               + method->value();
+            
+            /* convert full method string to uppercase */
+            for (char &c : full_method) {
+               c = toupper(c);
+            }
+
+            /* locate method in map */
+            auto it = symtab.find(full_method);
+            if (it == symtab.end()) {
+               std::cerr << "page: symbol " << full_method << " not found in symbol table."
+                         << std::endl;
+               throw "symbol not found";
+            }
+
+            /* get address & set in dispent */
+            unsigned int addr = it->second;
+            entry.addr_ = addr;
          }
       }
 
@@ -88,4 +103,62 @@ namespace cool {
       return retv;
    }
 
+   void PageReassignPages(/*DispatchTables& disptabs*/) {
+      DispatchTables& disptabs = gCgenDispatchTables;
+      
+      /* create list of all dispatch entries */
+      std::vector<DispatchEntry> entry_vec;
+      for (auto p : disptabs) {
+         DispatchTable disptab = p.second;
+         for (auto p : disptab) {
+            DispatchEntry dispent = p.second;
+            entry_vec.push_back(dispent);
+         }
+      }
+
+      /* sort list of dispatch entries */
+      std::sort(entry_vec.begin(), entry_vec.end(), 
+                [](const DispatchEntry& lhs, const DispatchEntry& rhs){
+                   return lhs.addr_ < rhs.addr_;
+                });
+
+
+      /* reassign addresses */
+      unsigned int addr_off = 0;
+      unsigned int page = 0;
+
+      std::vector<DispatchEntry>::iterator dispent_current = entry_vec.begin();
+      std::vector<DispatchEntry>::iterator dispent_next;
+      if (dispent_current != entry_vec.end()) {
+         for (dispent_next = dispent_current + 1; dispent_next != entry_vec.end();
+              ++dispent_next, ++dispent_current) {
+            unsigned int& cur_addr = dispent_current->addr_;
+            unsigned int& next_addr = dispent_next->addr_;
+
+            /* ensure length of current dispatch entry is no greater than one page */
+            if (next_addr - cur_addr > PAGE_SIZE) {
+               fprintf(stderr, "page: method %s" METHOD_SEP "%s is too long (%ud bytes).\n",
+                       dispent_current->klass_->value().c_str(), 
+                       dispent_current->method_->value().c_str(), next_addr - cur_addr);
+               throw std::pair<std::string,DispatchEntry>(std::string("method too long"),
+                                                          *dispent_current);
+            }
+
+            
+            if ((next_addr + addr_off - 1) / PAGE_SIZE > page) {
+               /* move current dispatch entry onto next page */
+               ++page;
+               addr_off += page * PAGE_SIZE - cur_addr;
+            }
+            
+            cur_addr += addr_off;
+         }
+      }
+
+      /* print result */
+      disptabs.print_entries();
+   }
+
+   
+   
 }

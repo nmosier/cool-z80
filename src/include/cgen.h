@@ -98,8 +98,10 @@ struct CgenLayout {
 // Forward declarations
  class CgenKlassTable;
  class DispatchEntry;
- typedef std::unordered_map<Symbol*,DispatchEntry> DispatchTable;
- typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
+ class DispatchTable;
+ class DispatchTables;
+ //typedef std::unordered_map<Symbol*,DispatchEntry> DispatchTable;
+ //typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
 
  class DispatchEntry {
  public:
@@ -117,25 +119,23 @@ struct CgenLayout {
                const Symbol *method, const Symbol *klass):
     loc_(loc), page_(page), addr_(addr), method_(method), klass_(klass) {}
 
-    friend std::ostream& operator<<(std::ostream& os, const DispatchEntry& dispent);
-
+    friend std::ostream& operator<<(std::ostream& os, const DispatchEntry
+& dispent);
+    
  };
 
 
- /*
+
 class DispatchTable: public std::unordered_map<Symbol*,DispatchEntry> {
 public:
-	DispatchTable& operator=(const DispatchTable &other) {
-		if (this != &other) {
-			for (std::pair<Symbol*,DispatchEntry> p : other) {
-				(*this)[p.first] = p.second;
-			}
-		}
-		
-		return *this;
-	}	
+    void print_entries() const;
 };
-*/
+
+ class DispatchTables: public std::unordered_map<Symbol*,DispatchTable> {
+ public: 
+    void print_entries() const;
+ };
+
 
 class VariableEnvironment {
  public:
