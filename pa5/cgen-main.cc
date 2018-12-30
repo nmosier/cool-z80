@@ -45,10 +45,12 @@ limitations under the License.
 extern int yy_flex_debug;                // Control Flex debugging (set to 1 to turn on)
 std::istream *gInputStream = &std::cin;  // istream being lexed/parsed
 const char *gCurrFilename = "<stdin>";   // Path to current file being lexed/parsed
-//std::string gOutFilename;                // Path to output (assembly) file being generated
+std::string gOutFilename;                // Path to output (assembly) file being generated
 extern int ast_yydebug;                  // Control Bison debugging (set to 1 to turn on)
 extern int ast_yyparse(void);            // Entry point to the AST parser
 extern cool::Program *gASTRoot;          // AST produced by parser
+
+//extern cool::DispatchTables gCgenDispatchTables;
 
 namespace {
 
@@ -134,7 +136,7 @@ int main(int argc, char *argv[]) {
      Cgen(gASTRoot, std::cout);
   }
   
-  //gOutputFilename = out_filename;
+  gOutFilename = out_filename;
   std::ofstream output_stream(out_filename);
   if (!output_stream) {
      std::cerr << "Cannot open output file " << out_filename << std::endl;
@@ -149,9 +151,24 @@ int main(int argc, char *argv[]) {
   if (cool::PageEmitAssemblySymTab(out_filename.c_str(), "z80_code/routines") < 0) {
      exit(2);
   }
-  if (cool::PageLoadMethodAddresses("simple.lab") < 0) {
+
+  /* format filename for symbol table */
+  std::string symtab_filename = gOutFilename;
+  char *c_str = (char *) symtab_filename.c_str();
+  char *ext;
+  if ((ext = strrchr(c_str, '.')) == NULL) {
+     symtab_filename = symtab_filename + ".lab";
+  } else {
+     char newpath[symtab_filename.size() + 4];
+     *ext = '\0';
+     sprintf(newpath, "%s.lab", c_str);
+     symtab_filename = std::string(newpath);
+  }
+
+  if (cool::PageLoadMethodAddresses(symtab_filename.c_str()) < 0) {
      exit(3);
   }
+  cool::PageReassignPages();
   
   return 0;
 }
