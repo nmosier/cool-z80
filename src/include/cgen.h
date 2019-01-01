@@ -93,54 +93,55 @@ struct CgenLayout {
  * @param program Program AST node
  * @param os std::ostream to write generated code to
  */
- void Cgen(Program* program, std::ostream& os);
+ void Cgen(Program* program, std::ostream& os, const char *asm_path, const char *lib_path);
  
-// Forward declarations
+ // Forward declarations
  class CgenKlassTable;
- class DispatchEntry;
- class DispatchTable;
- class DispatchTables;
- //typedef std::unordered_map<Symbol*,DispatchEntry> DispatchTable;
- //typedef std::unordered_map<Symbol*,DispatchTable> DispatchTables;
+   class DispatchEntry;
+   class DispatchTable;
+   class DispatchTables;
+   typedef std::unordered_map<std::string,unsigned int> AsmSymbolTable;
 
- class DispatchEntry {
+   class DispatchEntry {
+   public:
+      AbsoluteAddress loc_;
+      unsigned int page_;
+      unsigned int addr_;
+      const Symbol *method_;
+      const Symbol *klass_;
+      
+   DispatchEntry(): loc_(), page_(0), addr_(0), method_(NULL), klass_(NULL) {}
+   DispatchEntry(const AbsoluteAddress& loc, const Symbol *method, const Symbol *klass):
+      loc_(loc), page_(0), addr_(0), method_(method), klass_(klass) {}
+      
+   DispatchEntry(const AbsoluteAddress& loc, unsigned int page, unsigned int addr, 
+                 const Symbol *method, const Symbol *klass):
+      loc_(loc), page_(page), addr_(addr), method_(method), klass_(klass) {}
+
+      void LoadDispatchSymbol(const AsmSymbolTable& symtab);
+            
+      friend std::ostream& operator<<(std::ostream& os, const DispatchEntry
+                                      & dispent);
+      
+   };
+   
+   
+   
+   class DispatchTable: public std::unordered_map<Symbol*,DispatchEntry> {
+   public:
+      void print_entries() const;
+      void LoadDispatchSymbols(const AsmSymbolTable& symtab);
+   };
+   
+   class DispatchTables: public std::unordered_map<Symbol*,DispatchTable> {
+   public: 
+      void print_entries() const;
+   };
+ 
+ class VariableEnvironment {
  public:
-    AbsoluteAddress loc_;
-    unsigned int page_;
-    unsigned int addr_;
-    const Symbol *method_;
-    const Symbol *klass_;
+ VariableEnvironment(Klass* klass): temporary_count_(0), temporary_max_count_(0), klass_(klass), init_type_(nullptr) {}
     
- DispatchEntry(): loc_(), page_(0), addr_(0), method_(NULL), klass_(NULL) {}
- DispatchEntry(const AbsoluteAddress& loc, const Symbol *method, const Symbol *klass):
-    loc_(loc), page_(0), addr_(0), method_(method), klass_(klass) {}
-
- DispatchEntry(const AbsoluteAddress& loc, unsigned int page, unsigned int addr, 
-               const Symbol *method, const Symbol *klass):
-    loc_(loc), page_(page), addr_(addr), method_(method), klass_(klass) {}
-
-    friend std::ostream& operator<<(std::ostream& os, const DispatchEntry
-& dispent);
-    
- };
-
-
-
-class DispatchTable: public std::unordered_map<Symbol*,DispatchEntry> {
-public:
-    void print_entries() const;
-};
-
- class DispatchTables: public std::unordered_map<Symbol*,DispatchTable> {
- public: 
-    void print_entries() const;
- };
-
-
-class VariableEnvironment {
- public:
-  VariableEnvironment(Klass* klass): temporary_count_(0), temporary_max_count_(0), klass_(klass), init_type_(nullptr) {}
-  
   void Push(Symbol* var, MemoryLocation& offset) { vars_[var].push_back(offset.copy()); }
   void Pop(Symbol* var) { vars_[var].pop_back(); }
   MemoryLocation& Lookup(Symbol* var) { return *vars_[var].back(); }	// returns offset  
@@ -167,23 +168,17 @@ class VariableEnvironment {
  *
  * There
  */
-class CgenNode : public InheritanceNode<CgenNode> {
+ class CgenNode : public InheritanceNode<CgenNode> {
  public:
-  typedef std::int16_t ClassTag;
-  typedef std::unordered_map<Symbol*,Symbol*> MethodInheritanceTable;
- 
-  CgenNode(Klass* klass, bool inheritable, bool basic) : InheritanceNode(klass, inheritable, basic), tag_(0), attrVarEnv_(klass), objectSize_(3*WORD_SIZE) {}
-  ~CgenNode() {
-//     for (Features::const_iterator feature = klass()->features_begin(); feature != klass()->features_end(); ++feature) {
-//       if ((*feature)->attr()) {
-//         Symbol* attr_name = (*feature)->name();
-//         delete attrVarEnv_.vars_[attr_name].front();
-//         attrVarEnv_.vars_[attr_name].pop_front();
-//       }
-//     }
-  }
+    typedef std::int16_t ClassTag;
+    typedef std::unordered_map<Symbol*,Symbol*> MethodInheritanceTable;
+    
+ CgenNode(Klass* klass, bool inheritable, bool basic) : InheritanceNode(klass, inheritable, basic), 
+       tag_(0), attrVarEnv_(klass), objectSize_(3*WORD_SIZE) {}
+    ~CgenNode() {}
   
   int16_t tag() const { return tag_; }
+  DispatchTable& dispTab() { return dispTab_; } 
   
  private:
   /**
@@ -205,11 +200,18 @@ class CgenNode : public InheritanceNode<CgenNode> {
   VariableEnvironment attrVarEnv_;
   int objectSize_;
   
+  DispatchTable dispTab_;
+  MethodInheritanceTable methodInheritanceTab_;
+
   void CreateAttrVarEnv(int next_offset);
-  void CreateDispatchTables(DispatchTables& tables, MethodInheritanceTable inheritance_t,
-                            int next_offset);
+  void CreateDispatchTables(const DispatchTable& parent_dispatch_table, 
+                            const MethodInheritanceTable& parent_inheritance_table, int next_offset);
+  void LoadDispatchSymbols(const AsmSymbolTable& symtab);
   
-  void EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t);
+  void EmitPLT(std::ostream& os, MethodInheritanceTable inheritance_t);
+  
+  void EmitDispatchTable(std::ostream& os);
+  
   void EmitPrototypeObject(std::ostream& os);
   
   void EmitInitializer(std::ostream& os);
@@ -248,9 +250,13 @@ class CgenKlassTable : public KlassTable<CgenNode> {
    *
    * @param os std::ostream to write generated code to
    */
-  void CodeGen(std::ostream& os) const;
+   void CodeGen(std::ostream& os, const char *asm_path, const char *lib_path);
 
  private:
+  /**
+   * Symbol table (loaded after first pass of code generation).
+   */
+  AsmSymbolTable symtab_;
 
   /**
    * Emit code to the start the .data segment and declare global names
@@ -311,6 +317,11 @@ class CgenKlassTable : public KlassTable<CgenNode> {
    * Emit inheritance tree for case expressions
    */
   void CgenInheritanceTree(std::ostream& os) const;
+
+  /**
+   * Emit symbol table for assembled program (first pass).
+   */
+  void CgenSymbolTable(const char *asm_path, const char *lib_dir);
 
 };
 
