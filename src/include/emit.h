@@ -60,8 +60,9 @@ limitations under the License.
 #define BYTE_SIZE    1
 #define LOG_WORD_SIZE 2     // For logical shifts
 
-// File names
+// File names & paths
 #define DISPTAB_PATH         "disptab.z80"
+#define LIB_PATH             "z80_code/routines"
 
 // Global names
 #define CLASSNAMETAB         "class_nameTab"
