@@ -1,4 +1,4 @@
-;; equality_test
+wa ;; equality_test
 ;; PARAMS:
 ;;  * hl: object 1
 ;;  * de: object 2
@@ -97,3 +97,26 @@ _abort_wait:
 _	jr -_ ; wait for ON to be pressed
 	
 	
+#define PLT_ENTRY_SIZE 6 ; size of a single PLT entry
+; params:
+;  - hl: object upon which the method is called
+;  - bc: address of object's PLT
+;  - de: method's index in table
+_dynamic_dispatch_bcall:
+	push hl
+	
+	ld h,d
+	ld l,e
+	add hl,hl
+	add hl,hl
+	add hl,de ; hl *= 5
+	add hl,bc ; hl += address of PLT
+	
+	pop de
+	jp (hl) ; jump to method's entry in PLT
+	
+;_plt.<KLASS>:
+;	_dispent_dynamic.<METHOD>:  ; expects SELF in de, not hl
+;			ex de,hl
+;             call 50h
+ ;            .dw <METHOD>

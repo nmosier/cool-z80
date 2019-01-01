@@ -28,8 +28,10 @@ _start:
 
 	ld iy,flags
 	im 1	
+
 	
-	;ret
+	bcall(_GetKey) ;; wait for keypress
+	bcall(_GetKey)
 	bjump(_JForceCmdNoChar)
 	
 _success_msg:
