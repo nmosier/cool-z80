@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
      exit(1);
 
      //     gOutputFilename = std::string("<stdout>");
-     Cgen(gASTRoot, std::cout);
+     // Cgen(gASTRoot, std::cout);
   }
   
   gOutFilename = out_filename;
@@ -144,15 +144,16 @@ int main(int argc, char *argv[]) {
   }
 
   /* code generation: 1st pass (code gen) */
-  Cgen(gASTRoot, output_stream);
+  Cgen(gASTRoot, output_stream, out_filename.c_str(), LIB_PATH);
 
   /* code generation: 2nd pass (page alloc) */
-  
+  /*
   if (cool::PageEmitAssemblySymTab(out_filename.c_str(), "z80_code/routines") < 0) {
      exit(2);
-  }
+     } */
 
   /* format filename for symbol table */
+  /*
   std::string symtab_filename = gOutFilename;
   char *c_str = (char *) symtab_filename.c_str();
   char *ext;
@@ -169,6 +170,7 @@ int main(int argc, char *argv[]) {
      exit(3);
   }
   cool::PageReassignPages();
+  */
   
   return 0;
 }
