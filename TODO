@@ -1,8 +1,19 @@
 // TO-DO list for z80-cool
 
 0. handle page-swapping: use bcall() for now -- maybe reimplement later.
-   (i) count instruction bytes
-   (ii) add "page" entry for absolute addresses
+   * how to implemement page swapping for dynamic dispatch?
+     (a) copy instruction sequence to RAM and change address (but what about nested bcalls?)
+     (b) create PLT -- safer, but slower (requires 2 bcalls, as opposed to 1)
+         (i) entries of form:
+             
+             _dispent_dynamic.<METHOD>:
+             call 50h
+             #define _dispent_static.<METHOD> $-4000h ;; entry point for StaticDispatch
+             .dw <METHOD>
+             .db <METHOD's PAGE>
+             (6 bytes total)
+         (ii)
+             
 1. implement garbage collection
    (a) propogate GC tag in Object.copy()
 2. implement big arithmetic
