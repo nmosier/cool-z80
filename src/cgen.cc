@@ -75,7 +75,7 @@ namespace cool {
 bool gCgenDebug = false;
 int label_counter = 0;
 
-DispatchTables gCgenDispatchTables;
+   DispatchTables gCgenDispatchTables;
 CgenKlassTable* gCgenKlassTable;
 
 extern Symbol
@@ -180,19 +180,20 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
 // CreateDispatchTables
 //  -creates a table of dispatch tables (one per class)
 //   with each table mapping a method name to a memory location
-   void CgenNode::CreateDispatchTables(DispatchTables& tables, 
-                                       MethodInheritanceTable inheritance_t, int next_offset) {
+   void CgenNode::CreateDispatchTables(const DispatchTable& parent_dispatch_table, 
+                                       const MethodInheritanceTable& parent_inheritance_tab, int next_offset) {
 
-      
+      this->dispTab_ = parent_dispatch_table;
+      this->methodInheritanceTab_ = parent_inheritance_tab;
       
       if (parent() != nullptr) {
          /* copy parent's table and modify absolute address in new disptab */
          Symbol *name = klass()->name();
-         tables[name] = tables[parent()->name()];
-         for (auto p : tables[name]) {
+         for (auto p : dispTab_) {
             DispatchEntry& dispent = p.second;
             dispent.loc_.label_ = std::string(name->value()) + std::string(DISPTAB_SUFFIX);
-            tables[name][p.first] = dispent;
+            dispTab_[p.first] = dispent;
+            //tables[name][p.first] = dispent;
          }
       }
       
@@ -202,7 +203,7 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
          if ((*features_it)->method()) {
             Method* method = (Method*) (*features_it);
             Symbol* name = method->name();
-            inheritance_t[name] = klass()->name();
+            methodInheritanceTab_[name] = klass()->name();
          }
       }
       
@@ -211,26 +212,25 @@ void CgenNode::CreateAttrVarEnv(int next_offset) {
            feature != klass()->features_end(); ++feature) {
          if ((*feature)->method()) {
             Method* method = (Method*) (*feature);
-            if (tables[klass()->name()].find(method->name()) == tables[klass()->name()].end()) {
+            if (dispTab_.find(method->name()) == dispTab_.end()) {
                std::string dispTab_label = klass()->name()->value();
                dispTab_label.append(DISPTAB_SUFFIX);
                
                AbsoluteAddress loc(dispTab_label, next_offset);
-               //AbsoluteAddress *loc = new AbsoluteAddress(dispTab_label, next_offset);
-               Symbol *method_klassname = inheritance_t[method->name()];
+               Symbol *method_klassname = methodInheritanceTab_[method->name()];
                DispatchEntry entry(loc, 0, 0, method->name(), method_klassname);
-               tables[klass()->name()][method->name()] = entry;
+               dispTab_[method->name()] = entry;
                next_offset += 1*WORD_SIZE + 1*BYTE_SIZE;
             } else {
                /* overridden method -- update DispatchEntry */
-               DispatchEntry& dispent = tables[klass()->name()][method->name()];
+               DispatchEntry& dispent = dispTab_[method->name()];
                dispent.klass_ = this->klass()->name();
             }
          }
       }
-      
+
       for (CgenNode* child : children_)
-         { child->CreateDispatchTables(tables, inheritance_t, next_offset); }
+         { child->CreateDispatchTables(dispTab_, methodInheritanceTab_, next_offset); }
    }
    
    
@@ -256,7 +256,8 @@ CgenKlassTable::CgenKlassTable(Klasses* klasses) {
 
   // recursively generate dispatch tables, starting from empty table
   CgenNode::MethodInheritanceTable inheritance_t;
-  root()->CreateDispatchTables(gCgenDispatchTables, inheritance_t, 0);
+  DispatchTable dispTab;
+  root()->CreateDispatchTables(dispTab, inheritance_t, 0);
 }
 
 
@@ -331,34 +332,33 @@ void CgenKlassTable::CgenGlobalText(std::ostream& os) const {
 
 // modified 8/2018
 // NEW APPROACH: GENEREATE IN SEPARATE .asm FILE
-void CgenNode::EmitDispatchTable(std::ostream& os, DispatchTables& tables, MethodInheritanceTable inheritance_t) {
-  DispatchTable& table = tables[klass()->name()];
-  
-  std::vector<std::pair<Symbol*,DispatchEntry>> ordered_table;
-  for (auto p : table) {
-     ordered_table.push_back(p);
-  }
-
-	/* sort table by offsets of entries from dispatch table label */
-	std::sort(ordered_table.begin(), ordered_table.end(), [](const auto& lhs, const auto& rhs){
-      return lhs.second.loc_ < rhs.second.loc_; // compare absolute addresses
-	});
-
-	/* generate dispatch table for class */
-  os << klass()->name() << DISPTAB_SUFFIX << LABEL;
-  for (auto method_pair : ordered_table) {
-     DispatchEntry& dispent = method_pair.second;
-     os << dispent;
-  }
-
-  for (CgenNode* child : children_)
-    { child->EmitDispatchTable(os, tables, inheritance_t); }
+   void CgenNode::EmitDispatchTable(std::ostream& os) {
+      DispatchTable& table = dispTab_; //tables[klass()->name()];
+      
+      std::vector<std::pair<Symbol*,DispatchEntry>> ordered_table;
+      for (auto p : table) {
+         ordered_table.push_back(p);
+      }
+      
+      /* sort table by offsets of entries from dispatch table label */
+      std::sort(ordered_table.begin(), ordered_table.end(), [](const auto& lhs, const auto& rhs){
+            return lhs.second.loc_ < rhs.second.loc_; // compare absolute addresses
+         });
+      
+      /* generate dispatch table for class */
+      os << klass()->name() << DISPTAB_SUFFIX << LABEL;
+      for (auto method_pair : ordered_table) {
+         DispatchEntry& dispent = method_pair.second;
+         os << dispent;
+      }
+      
+      for (CgenNode* child : children_)
+         { child->EmitDispatchTable(os); }
 }
-
+   
 // CgenDispatchTables: emits all dispatch tables
 void CgenKlassTable::CgenDispatchTables(std::ostream& os) const {
-  CgenNode::MethodInheritanceTable inheritance_t;
-  root()->EmitDispatchTable(os, gCgenDispatchTables, inheritance_t);
+  root()->EmitDispatchTable(os);
 }
 
 // modified 8/18
@@ -659,7 +659,7 @@ void CgenHeader(std::ostream& os) {
    }
 }
 
-   void CgenKlassTable::CodeGen(std::ostream& os) const {
+   void CgenKlassTable::CodeGen(std::ostream& os, const char *asm_path, const char *lib_path) {
       CgenHeader(os);
       
       CgenGlobalData(os);
@@ -674,23 +674,25 @@ void CgenHeader(std::ostream& os) {
       
       CgenGlobalText(os);
       
-  
+      
       CgenClassInits(os);
       CgenClassMethods(os);
 
-  /* generate dispatch tables to separate file */
-  std::filebuf disptab_fb;
-  if (disptab_fb.open(DISPTAB_PATH, std::ios::out) == NULL) {
-     perror("std::filebuf.open");
-     throw std::exception();
-  }
-  std::ostream disptab_os(&disptab_fb);
-  CgenDispatchTables(disptab_os);
-  disptab_os.flush();
-  disptab_fb.close();
-}
-
-
+      /* generate dispatch tables to separate file */
+      std::filebuf disptab_fb;
+      if (disptab_fb.open(DISPTAB_PATH, std::ios::out) == NULL) {
+         perror("std::filebuf.open");
+         throw std::exception();
+      }
+      std::ostream disptab_os(&disptab_fb);
+      CgenDispatchTables(disptab_os);
+      disptab_os.flush();
+      disptab_fb.close();
+      
+      CgenSymbolTable(asm_path, lib_path);
+   }
+   
+   
 
 /* CODE GENERATION FOR AST NODES */
 void Method::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
@@ -1373,13 +1375,14 @@ void StaticDispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_jr(dispatch_abort, Flags::Z, os); // abort if receiver is void
   
   // call static method on given class
-  //os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
+  os << CALL << dispatch_type_ << METHOD_SEP << name_ << std::endl;
+  /*
   std::string dispatch_str = std::string(DISPENT_PREFIX) + dispatch_type_->value() 
      + std::string(METHOD_SEP) + name_->value();
   AbsoluteAddress dispatch_addr(dispatch_str);
   emit_bcall(dispatch_addr, os); // bcall method
+  */
 
-  
   for (Expression *expr : *actuals_) {
      emit_pop(rDE, os); // pop off args
   }
@@ -1417,11 +1420,15 @@ void Dispatch::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
   emit_load(RegisterValue(rBC), RegisterPointer(ARG0), os); // rBC = address of disptable
   
   int16_t method_offset;
+  CgenNode *klass;
   if (receiver_->type() == SELF_TYPE) {
-     method_offset = gCgenDispatchTables[varEnv.klass_->name()][name_].loc_.offset();
+     klass = gCgenKlassTable->ClassFind(varEnv.klass_->name());
+     //method_offset = gCgenDispatchTables[varEnv.klass_->name()][name_].loc_.offset();
   } else {
-     method_offset = gCgenDispatchTables[receiver_->type()][name_].loc_.offset();
+     klass = gCgenKlassTable->ClassFind(receiver_->type());
+     //method_offset = gCgenDispatchTables[receiver_->type()][name_].loc_.offset();
   }
+  method_offset = klass->dispTab()[name_].loc_.offset();
   
   emit_load(RegisterValue(ARG0), Immediate16(method_offset), os);
   emit_add(ARG0, rBC, os); // ARG0 = pointer to address of function to call
@@ -1457,13 +1464,13 @@ void Assign::CodeGen(VariableEnvironment& varEnv, std::ostream& os) {
 }
 
 
-void Cgen(Program* program, std::ostream& os) {
-  InitCoolSymbols();
-
-  CgenKlassTable klass_table(program->klasses());
-  gCgenKlassTable = &klass_table;
-  klass_table.CodeGen(os);
-}
+   void Cgen(Program* program, std::ostream& os, const char *asm_path, const char *lib_path) {
+      InitCoolSymbols();
+      
+      CgenKlassTable klass_table(program->klasses());
+      gCgenKlassTable = &klass_table;
+      klass_table.CodeGen(os, asm_path, lib_path);
+   }
 
 
 
