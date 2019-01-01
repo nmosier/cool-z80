@@ -15,8 +15,8 @@
 namespace cool {
    extern DispatchTables gCgenDispatchTables;
 
-   
-   int PageEmitAssemblySymTab(const char *asm_path, const char *lib_dir) {
+
+   void CgenKlassTable::CgenSymbolTable(const char *asm_path, const char *lib_dir) {
       char cmd[256];
 
       /* emit symbol table using spasm */
@@ -24,12 +24,91 @@ namespace cool {
 
       if (system(cmd)) {
          perror("system");
-         return -1;
+         throw "assembler error";
       }
 
-      return 0;
+      /* format symbol table path */
+      std::string symtab_path(asm_path);
+      size_t ext_index;
+      if ((ext_index = symtab_path.rfind(".", symtab_path.rfind("/"))) != std::string::npos) {
+         symtab_path = symtab_path.substr(0, ext_index);
+      }
+      symtab_path += std::string(".lab");
+      
+      /* load symbol table */
+      FILE *symtabf;
+      /* open symbol table file */
+      if ((symtabf = fopen(symtab_path.c_str(), "r")) == NULL) {
+         perror("fopen");
+         throw "cannot open symbol table file";
+      }
+
+      /* load symbols from file into map */
+      char sbuf[SYMTAB_MAXLEN];
+      while (fgets(sbuf, SYMTAB_MAXLEN, symtabf)) {
+         char sym[SYM_MAXLEN];
+         unsigned int addr;
+         
+         if (sscanf(sbuf, "%s = $%x", sym, &addr) < 2) {
+            fprintf(stderr, "CgenSymbolTable: invalid symbol table format.\n");
+            if (fclose(symtabf) < 0) {
+               perror("fclose");
+            }
+            throw "symbol table parse error";
+         }
+         
+         std::string sym2(sym);
+         symtab_[sym2] = addr;
+      }
+      
+      /* close symbol table file */
+      if (fclose(symtabf) < 0) {
+         perror("fclose");
+         throw "could not close symbol table file";
+      }
+   
+      /* load dispatch symbols into dispatch entries */
+      root()->LoadDispatchSymbols(symtab_);
+}
+
+   void CgenNode::LoadDispatchSymbols(const AsmSymbolTable& symtab) {
+      /* load this node's dispatch symbols */
+      dispTab_.LoadDispatchSymbols(symtab);
+
+      /* load children's dispatch symbols */
+      for (auto child : children_) {
+         child->LoadDispatchSymbols(symtab);
+      }
    }
 
+   void DispatchTable::LoadDispatchSymbols(const AsmSymbolTable& symtab) {
+      for (std::pair<Symbol*,DispatchEntry&> p : *this) {
+            DispatchEntry& entry = p.second;
+            entry.LoadDispatchSymbol(symtab);
+      }
+   }
+
+   void DispatchEntry::LoadDispatchSymbol(const AsmSymbolTable& symtab) {
+      std::string full_method = klass_->value() + std::string(METHOD_SEP) 
+         + method_->value();
+      
+      /* convert full method string to uppercase */
+      for (char &c : full_method) {
+         c = toupper(c);
+      }
+      
+      /* locate method in map */
+      auto it = symtab.find(full_method);
+      if (it == symtab.end()) {
+         std::cerr << "page: symbol " << full_method << " not found in symbol table."
+                   << std::endl;
+         throw "symbol not found";
+      }
+      
+      /* get address & set in dispent */
+      addr_ = it->second;
+   }
+   
    int PageLoadMethodAddresses(const char *symtab_path/*, DispatchTables& disptabs*/) {
       DispatchTables& disptabs = gCgenDispatchTables;
       typedef std::unordered_map<std::string,unsigned int> AsmSymbolTable;
