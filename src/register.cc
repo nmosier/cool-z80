@@ -1,3 +1,7 @@
+/* register.cc
+ * Copyright Nicholas Mosier 2018
+ */
+
 #include "register.h"
 #include <iostream>
 #include <functional>

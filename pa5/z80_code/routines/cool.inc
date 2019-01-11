@@ -1,4 +1,6 @@
-	.nolist
+;; Nicholas Mosier 2018
+;;
+   .nolist
 
 #define _string_objdata_offset 2*4
 #define _string_basesize 2*4

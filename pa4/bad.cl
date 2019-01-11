@@ -1,3 +1,7 @@
+(* Nicholas Mosier 2017
+ *
+ *)
+
 class C {
 	a : Int;
 	b : Bool;

@@ -19,6 +19,7 @@ ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
 Copyright 2017 Michael Linderman.
+Copyright 2018 Nicholas Mosier.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -132,9 +133,9 @@ struct CgenLayout {
       void print_entries() const;
       void LoadDispatchSymbols(const AsmSymbolTable& symtab);
    };
-   
+
    class DispatchTables: public std::unordered_map<Symbol*,DispatchTable> {
-   public: 
+   public:
       void print_entries() const;
    };
  
@@ -204,9 +205,12 @@ struct CgenLayout {
   MethodInheritanceTable methodInheritanceTab_;
 
   void CreateAttrVarEnv(int next_offset);
-  void CreateDispatchTables(const DispatchTable& parent_dispatch_table, 
+
+    /* dispatch table methods */
+    void CreateDispatchTables(const DispatchTable& parent_dispatch_table, 
                             const MethodInheritanceTable& parent_inheritance_table, int next_offset);
-  void LoadDispatchSymbols(const AsmSymbolTable& symtab);
+    void LoadDispatchSymbols(const AsmSymbolTable& symtab);
+    void ListDispatchEntries(std::vector<DispatchEntry> entry_list);
   
   void EmitPLT(std::ostream& os, MethodInheritanceTable inheritance_t);
   

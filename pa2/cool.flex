@@ -30,6 +30,7 @@ ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
 Copyright 2017 Michael Linderman.
+Copyright 2017 Nicholas Mosier.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -43,6 +44,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
+/* NOTES ABOUT AUTHORSHIP:
+ *  - Michael Linderman (2017) provided the minimal infrastructural code to
+ *    make this compile with flex.
+ *  - Nicholas Mosier (2017) implemented all of COOL's lexical rules in flex
+ *    (the lexer), i.e. everything else.
+ */
 
 #include <string>
 #include <istream>

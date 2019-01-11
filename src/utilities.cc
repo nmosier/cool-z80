@@ -19,6 +19,7 @@ ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
 Copyright 2017 Michael Linderman.
+Copyright 2018 Nicholas Mosier.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -183,6 +184,10 @@ int cool::etoi(T e) {
 	assert (sizeof(T) == sizeof(int));
 	return *((int*)&e);
 }
+
+/*********************************************************/
+/* the rest of this file was authored by Nicholas Mosier */
+/*********************************************************/
 
 template <typename T>
 bool operator==(const cool::unordered_pair<T>& lhs, const cool::unordered_pair<T>& rhs) {

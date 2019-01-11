@@ -20,6 +20,7 @@ ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
 Copyright 2017 Michael Linderman.
+Copyright 2017,2018 Nicholas Mosier.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,6 +34,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
+/* NOTES ABOUT AUTHORSHIP:
+ *  - Michael Linderman (2017) provided the skeleton code (stub functions) for 
+ *    most of the methods in this file.
+ *  - Nicholas Mosier (2018) implemented all methods in this file, including 
+ *    many new ones not provided in the original skeleton code.
+ */
 
 #include <iostream>
 #include <fstream>

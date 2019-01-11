@@ -1,3 +1,7 @@
+(* Nicholas Mosier 2017
+ *
+ *)
+
 class Main inherits IO {
   -- case_abort
   other : Main;

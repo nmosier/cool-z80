@@ -1,4 +1,4 @@
-(*  Nicholas Mosier
+(*  Nicholas Mosier 2017
  *  CS433
  *
  *  Implementation of a simple stack machine.

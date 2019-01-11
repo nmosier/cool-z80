@@ -1,3 +1,5 @@
+;; Nicholas Mosier 2018
+;;
 ;; String.z80
 ;; contains all built-in routines for cool String object
 

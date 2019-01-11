@@ -1,4 +1,6 @@
-wa ;; equality_test
+;; Nicholas Mosier 2018
+
+;; equality_test
 ;; PARAMS:
 ;;  * hl: object 1
 ;;  * de: object 2

@@ -1,4 +1,4 @@
-(*
+(*  Nicholas Mosier 2017
     Example cool program testing as many aspects of the code generator
     as possible.
 *)

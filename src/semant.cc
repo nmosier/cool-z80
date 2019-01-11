@@ -56,6 +56,12 @@
 //   maintained that all parents of a class are checked before a class
 //   is checked.
 
+/* NOTES ABOUT AUTHORSHIP:
+ *  - Michael Linderman (2017) provided the skeleton code (stub functions) for 
+ *    a few of the methods in this file.
+ *  - Nicholas Mosier (2018) implemented all methods in this file (including many 
+ *    new ones not provided by the original skeleton code.).
+ */
 
 #include <cstdlib>
 #include <algorithm>

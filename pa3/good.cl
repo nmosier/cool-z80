@@ -1,3 +1,7 @@
+(* Nicholas Mosier 2017
+ * 
+ *)
+
 class TestA {
 	-- testing attributes
 	num: Int;

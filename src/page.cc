@@ -1,11 +1,15 @@
 /* page.cc
+ * Copyright Nicholas Mosier 2018
+ *
  * separates generated assembly into pages, updating the 
- * dispatch tables */
+ * dispatch tables 
+ */
 
 #include <cstdlib>
 #include <cstdio>
 #include <unistd.h>
 #include <iostream>
+#include <iterator>
 #include <fstream>
 #include <numeric>
 #include "cgen.h"
@@ -108,80 +112,17 @@ namespace cool {
       /* get address & set in dispent */
       addr_ = it->second;
    }
-   
-   int PageLoadMethodAddresses(const char *symtab_path/*, DispatchTables& disptabs*/) {
-      DispatchTables& disptabs = gCgenDispatchTables;
-      typedef std::unordered_map<std::string,unsigned int> AsmSymbolTable;
-      AsmSymbolTable symtab;
-      FILE *symtabf;
-      int retv;
 
-      /* init */
-      retv = -1;
-      symtabf = NULL;
-      
-      /* open symbol table file */
-      if ((symtabf = fopen(symtab_path, "r")) == NULL) {
-         perror("fopen");
-         goto cleanup;
+   // recursively list dispatch entries in dispatch tables of node & children
+   void CgenNode::ListDispatchEntries(std::vector<DispatchEntry> entry_list) {
+      std::copy(dispTab_.begin(), dispTab_.end(), std::back_inserter(entry_list));
+
+      /* recurisvely list dispents */
+      for (auto child : children_) {
+         child->ListDispatchEntries(entry_list);
       }
-
-      /* load symbols from file into map */
-      char sbuf[SYMTAB_MAXLEN];
-      while (fgets(sbuf, SYMTAB_MAXLEN, symtabf)) {
-         char sym[SYM_MAXLEN];
-         unsigned int addr;
-         
-         if (sscanf(sbuf, "%s = $%x", sym, &addr) < 2) {
-            fprintf(stderr, "PageLoadMethodAddresses: invalid symbol table format.\n");
-            goto cleanup;
-         }
-         
-         std::string sym2(sym);
-         symtab[sym2] = addr;
-      }
-
-      /* set addresses in dispatch table entries */
-      for (std::pair<Symbol*,DispatchTable&> p : disptabs) {
-         DispatchTable& disptab = p.second;
-
-         for (std::pair<Symbol*,DispatchEntry&> p : disptab) {
-            DispatchEntry& entry = p.second;
-            const Symbol *klass = entry.klass_;
-            const Symbol *method = entry.method_;
-            std::string full_method = klass->value() + std::string(METHOD_SEP) 
-               + method->value();
-            
-            /* convert full method string to uppercase */
-            for (char &c : full_method) {
-               c = toupper(c);
-            }
-
-            /* locate method in map */
-            auto it = symtab.find(full_method);
-            if (it == symtab.end()) {
-               std::cerr << "page: symbol " << full_method << " not found in symbol table."
-                         << std::endl;
-               throw "symbol not found";
-            }
-
-            /* get address & set in dispent */
-            unsigned int addr = it->second;
-            entry.addr_ = addr;
-         }
-      }
-
-      retv = 0;
-
-   cleanup:
-      if (symtabf && fclose(symtabf) < 0) {
-         retv = -1;
-         perror("fclose");
-      }
-
-      return retv;
    }
-
+   
    void PageReassignPages(/*DispatchTables& disptabs*/) {
       DispatchTables& disptabs = gCgenDispatchTables;
       

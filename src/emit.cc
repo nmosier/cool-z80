@@ -1,3 +1,7 @@
+/* emit.cc
+ * Copyright Nicholas Mosier 2018
+ */
+
 #include <iostream>
 #include <string>
 #include <set>

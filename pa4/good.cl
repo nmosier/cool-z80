@@ -1,3 +1,7 @@
+(* Nicholas Mosier 2017
+ *
+ *)
+
 class D inherits C {
     init(x: Int, y: Bool) : C { self };
 };

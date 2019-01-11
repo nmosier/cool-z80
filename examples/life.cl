@@ -419,8 +419,7 @@ class Main inherits CellularAutomaton {
 	     cells.print();
              while continue loop
 		if prompt() then
-                    {
-                        cells.evolve();
+                    {                        cells.evolve();
                         cells.print();
                     }
 		else

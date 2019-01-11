@@ -1,3 +1,5 @@
+// Nicholas Mosier 2018
+// 
 // register.h
 // header for register class
 

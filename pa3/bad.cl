@@ -1,5 +1,6 @@
 
-(*
+(*  Nicholas Mosier 2017
+ * 
  *  Execute "coolc bad.cl" to see the error messages that the coolc parser
  *  generates
  *)

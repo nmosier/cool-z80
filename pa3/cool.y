@@ -24,6 +24,7 @@
   PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
   Copyright 2017 Michael Linderman.
+  Copyright 2017 Nicholas Mosier
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -38,6 +39,14 @@
   limitations under the License.
   */
 
+  /* NOTES ABOUT AUTHORSHIP:
+   *  - Michael Linderman (2017) provided the minimal infrastructural code to
+   *    make this compile with bison.
+   *  - Nicholas Mosier (2017) implemented all of COOL's semantics in bison
+   *    (the semantic analyzer), i.e. everything else in this file.
+  */
+
+   
   #include "ast.h"
   #include "stringtab.h"
   #include "utilities.h"
