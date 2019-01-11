@@ -1,0 +1,95 @@
+#######################
+# COOL-Z80 -- AUTHORS #
+#######################
+
+This file describes the authorship history of this project.
+In general, Michael Linderman provided a foundation of skeleton
+code so that the project would successfully compile, but do
+nothing useful. Nicholas Mosier implemented all code/logic that
+defines how a COOL program is compiled into an assembly program.
+
+Michael Linderman, Copyright 2017:
+    Infrastructural code foundation for the MiddCool project for CS433,
+    Compiler Design at Middlebury College.
+
+    * all cmake files
+    * the PDFs cool-manual.pdf and cool-tour.pdf
+    * the following files:
+       - src
+           - ast.cc
+           - ast_consumer.cc
+           - cgen_supp.cc
+           - stringtab.cc
+           - include
+              - ast_consumer.h
+              - ast_parse.h
+              - ast_supp.h
+              - cgen_supp.h
+              - scopedtab.h
+              - stringtab.h
+       - pa2
+           - lexer-main.cc
+       - pa3
+           - parser-main.cc
+           - myparser
+       - pa4
+           - mysemant.sh
+           - semant-main.sh
+       - pa5
+           - mycoolc
+
+Michael Linderman, Copyright 2017
+Nicholas Mosier, Copyright 2017,2018
+    Skeleton code provided by Michael Linderman. Nicholas Mosier implemented
+    all code in 2017 for CS433 assignment and rewrote / added to existing
+    code in 2018 for cool-z80 project.
+(skeleton code)
+    - src
+       - cgen.cc
+       - utilities.cc
+       - include
+          - ast.h
+          - ast_fwd.h
+          - cgen.h
+          - emit.h
+          - semant.h
+          - utilities.h
+    - pa2
+       - cool.flex
+    - pa3
+       - cool.y
+    - pa5
+       - cgen-main.cc
+       
+
+
+Nicholas Mosier, Copyright 2017,2018
+    New files written by Nicholas Mosier for CS433 assignment (2017)
+    and cool-z80 project (2018).
+    - src
+       - emit.cc
+       - page.cc
+       - register.cc
+       - include
+          - page.h
+          - register.h
+    - pa1
+       - README.md
+       - stack.cl
+       - stack.test
+    - pa2
+       - README.md
+       - tests (all files)
+    - pa3
+       - README.md
+       - good.cl
+       - bad.cl
+    - pa4
+       - README.md
+       - good.cl
+       - bad.cl
+    - pa5
+       - errors.cl
+       - example.cl
+       - z80_code (all files)
+       
