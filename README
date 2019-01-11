@@ -1,0 +1,34 @@
+NAME
+   cool-z80 - a compiler from COOL to Z80 assembly and TI 83+/84+ programs
+
+DESCRIPTION
+
+cool-z80 is a compiler for MiddCool that produces Z80 assembly code and
+TI 83+/84+ graphing calculator flash applications. (MiddCool is a
+modification of the COOL Programming Language.) The compiler currently
+supports all core MiddCool language features and features a custom
+implementation of the COOL runtime system for TI-OS (the operating
+system of TI 83+/84+ calculators).
+
+The compiler consists of four modules - the lexer, parser, semantic
+analyzer, and code generator. The code generator outputs Z80 assembly,
+which is then assembled into a TI-OS flash application using the
+assembler spasm-ng.
+
+
+HISTORY
+
+The code for cool-z80 is based on a fully-functional MiddCool-to-MIPS
+compiler I wrote for Compiler Design over the course of a semester
+(Sep - Dec 2017). cool-z80's lexer (using flex), parser (using bison),
+and semantic analyzer remain unchanged from this earlier project, but
+cool-z80's entire code generator has been rewritten.
+
+FUTURE WORK
+
+Bug fixes
+Support for multipage applications (currently only supports single-page applications, up to 16 KB in size)
+Garbage collection
+Big arithmetic
+Code optimization module
+Language extensions (arrays, etc.)
